@@ -1,0 +1,7 @@
+android/** linguist-generated=true
+linux/** linguist-generated=true
+web/** linguist-generated=true
+ios/** linguist-generated=true
+windows/** linguist-generated=true
+macos/** linguist-generated=true
+*.g.dart linguist-generated=true
