@@ -8,9 +8,14 @@ class PlayerState extends ChangeNotifier {
   List<Song> _songs = [];
   Song? _currentSong;
 
+  PlayerState() {
+    _player.playerStateStream.listen((_) => notifyListeners());
+  }
+
   List<Song> get songs => _songs;
   Song? get currentSong => _currentSong;
   AudioPlayer get player => _player;
+  bool get isPlaying => _player.playing;
 
   Future<void> loadLibrary() async {
     _songs = await LibraryScanner().scanSongs();
@@ -21,13 +26,13 @@ class PlayerState extends ChangeNotifier {
     _currentSong = song;
     await _player.setFilePath(song.path);
     _player.play();
-    notifyListeners();
   }
 
-  void pause() {
-    _player.pause();
-    notifyListeners();
+  void togglePlayPause() {
+    playing ? _player.pause() : _player.play();
   }
+
+  bool get playing => _player.playing;
 
   @override
   void dispose() {

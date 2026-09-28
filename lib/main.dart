@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:media_player/widgets/mini_player.dart';
 import 'package:provider/provider.dart';
 import 'providers/player_state.dart';
 import 'screens/library_screen.dart';
@@ -19,7 +20,10 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: const LibraryScreen(),
+      home: Scaffold(
+        body: const LibraryScreen(),
+        bottomNavigationBar: const MiniPlayer(),
+      ),
     );
   }
 }
