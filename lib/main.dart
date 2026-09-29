@@ -28,6 +28,22 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF121212), // Spotify's signature near-black
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF1DB954), // Spotify green, as a nod — swap for your own accent if you want
+          brightness: Brightness.dark,
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF121212),
+          elevation: 0,
+        ),
+        listTileTheme: const ListTileThemeData(
+          textColor: Colors.white,
+          iconColor: Colors.white70,
+        ),
+      ),
       home: Scaffold(
         body: const LibraryScreen(),
         bottomNavigationBar: const MiniPlayer(),
@@ -35,6 +51,5 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
 
 

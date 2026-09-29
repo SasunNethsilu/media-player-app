@@ -23,7 +23,7 @@ class MiniPlayer extends StatelessWidget {
       },
       child: Container(
         height: 64,
-        color: Colors.grey[900],
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: Row(
           children: [
             const SizedBox(width: 12),
