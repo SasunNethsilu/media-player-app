@@ -8,8 +8,11 @@ class PlayerState extends ChangeNotifier {
   final AudioPlayer _player = AudioPlayer();
   List<Song> _songs = [];
   List<Song> _queue = [];
-  final List<Song> _history = [];
+  List<Song> _history = [];
   Song? _currentSong;
+  bool _isLoadingLibrary = false;
+  String? _libraryError;
+  bool _isDisposed = false;
 
   PlayerState() {
     _player.playerStateStream.listen((_) => notifyListeners());
@@ -27,10 +30,40 @@ class PlayerState extends ChangeNotifier {
   Song? get currentSong => _currentSong;
   AudioPlayer get player => _player;
   bool get isPlaying => _player.playing;
+  bool get isLoadingLibrary => _isLoadingLibrary;
+  String? get libraryError => _libraryError;
 
   Future<void> loadLibrary() async {
-    _songs = await LibraryScanner().scanSongs();
+    if (_isLoadingLibrary || _isDisposed) return;
+
+    _isLoadingLibrary = true;
+    _libraryError = null;
     notifyListeners();
+
+    try {
+      final songs = await LibraryScanner().scanSongs();
+
+      if (_isDisposed) return;
+
+      _songs = songs;
+    } on LibraryPermissionDenied {
+      if (_isDisposed) return;
+
+      _libraryError =
+          'Audio access is needed to show your music. '
+          'Grant permission when prompted, or enable it in app settings.';
+    } catch (error, stackTrace) {
+      if (_isDisposed) return;
+
+      _libraryError = 'Could not load your music. Please try again.';
+      debugPrint('Library scan failed: $error\n$stackTrace');
+    } finally {
+      _isLoadingLibrary = false;
+
+      if (!_isDisposed) {
+        notifyListeners();
+      }
+    }
   }
 
   Future<void> play(Song song) async {
@@ -52,9 +85,14 @@ class PlayerState extends ChangeNotifier {
   }
 
   Future<void> playFromLibrary(Song song, List<Song> fromList) async {
-    final startIndex = _songs.indexOf(song);
-    _queue = _songs.sublist(startIndex + 1);
-    await play(song);
+    final startIndex = fromList.indexWhere((item) => item.id == song.id);
+
+    if (startIndex == -1) return;
+
+    _queue = fromList.sublist(startIndex + 1);
+    _history = fromList.sublist(0, startIndex);
+
+    await play(fromList[startIndex]);
   }
 
   Future<void> playNext() async {
@@ -94,6 +132,7 @@ class PlayerState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _player.dispose();
     super.dispose();
   }

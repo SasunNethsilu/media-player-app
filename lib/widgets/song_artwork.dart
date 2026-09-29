@@ -40,17 +40,33 @@ class _SongArtworkState extends State<SongArtwork> {
   }
 
   Future<Uint8List?> _fetchArtwork() async {
-    if (_cache.containsKey(widget.songId)) {
-      return _cache[widget.songId];
+    final songId = widget.songId;
+
+    if (_cache.containsKey(songId)) {
+      return _cache[songId];
     }
-    final bytes = await OnAudioQuery().queryArtwork(widget.songId, ArtworkType.AUDIO, size: 800, quality: 100);
-    _cache[widget.songId] = bytes;
-    return bytes;
+
+    try {
+      final bytes = await OnAudioQuery().queryArtwork(
+        songId,
+        ArtworkType.AUDIO,
+        size: 800,
+        quality: 100,
+      );
+
+      _cache[songId] = bytes;
+      return bytes;
+    } catch (error) {
+      // Don't cache failed requests, so a later request can retry.
+      debugPrint('Artwork lookup failed for $songId: $error');
+      return null;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Uint8List?>(
+      key: ValueKey(widget.songId),
       future: _artworkFuture,
       builder: (context, snapshot) {
         final bytes = snapshot.data;

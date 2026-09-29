@@ -4,8 +4,10 @@ import 'package:just_audio_background/just_audio_background.dart';
 import 'package:provider/provider.dart';
 import 'providers/player_state.dart';
 import 'screens/library_screen.dart';
+import 'screens/search_screen.dart';
 
 final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await JustAudioBackground.init(
@@ -46,9 +48,46 @@ class MyApp extends StatelessWidget {
           iconColor: Colors.white70,
         ),
       ),
-      home: Scaffold(
-        body: const LibraryScreen(),
-        bottomNavigationBar: const MiniPlayer(),
+      home: const MainShell(),
+    );
+  }
+}
+
+class MainShell extends StatefulWidget {
+  const MainShell({super.key});
+
+  @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  int _selectedIndex = 0;
+
+  static const _screens = [
+    LibraryScreen(),
+    SearchScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _screens,
+      ),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const MiniPlayer(),
+          NavigationBar(
+            selectedIndex: _selectedIndex,
+            onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+            destinations: const [
+              NavigationDestination(icon: Icon(Icons.library_music), label: 'Library'),
+              NavigationDestination(icon: Icon(Icons.search), label: 'Search'),
+            ],
+          ),
+        ],
       ),
     );
   }

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../providers/player_state.dart';
-import '../widgets/song_artwork.dart';
-import '../widgets/search_sort_bar.dart';
 import '../services/song_filter.dart';
-import '../main.dart';
+import '../widgets/song_artwork.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -13,74 +12,139 @@ class LibraryScreen extends StatefulWidget {
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
 
-class _LibraryScreenState extends State<LibraryScreen> with RouteAware {
-  final FocusNode _searchFocusNode = FocusNode();
-  String _query = '';
+class _LibraryScreenState extends State<LibraryScreen> {
   SortOption _sortOption = SortOption.title;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    routeObserver.subscribe(this, ModalRoute.of(context)! as PageRoute);
-  }
-
-  @override
-  void dispose() {
-    _searchFocusNode.dispose();
-    routeObserver.unsubscribe(this);
-    super.dispose();
-  }
-
-  @override
-  void didPopNext() {
-    _searchFocusNode.unfocus();
-  }
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => context.read<PlayerState>().loadLibrary());
+
+    Future.microtask(() {
+      if (mounted) {
+        context.read<PlayerState>().loadLibrary();
+      }
+    });
+  }
+
+  Widget _message({
+    required IconData icon,
+    required String text,
+    required String buttonLabel,
+    required VoidCallback onPressed,
+  }) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: Colors.white54),
+            const SizedBox(height: 16),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: onPressed,
+              child: Text(buttonLabel),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final playerState = context.watch<PlayerState>();
-    final displayedSongs = filterAndSortSongs(playerState.songs, _query, _sortOption);
+    final sortedSongs = filterAndSortSongs(
+      playerState.songs,
+      '',
+      _sortOption,
+    );
+
+    Widget body;
+
+    if (playerState.isLoadingLibrary) {
+      body = const Center(child: CircularProgressIndicator());
+    } else if (playerState.libraryError != null) {
+      body = _message(
+        icon: Icons.info_outline,
+        text: playerState.libraryError!,
+        buttonLabel: 'Try again',
+        onPressed: () {
+          playerState.loadLibrary();
+        },
+      );
+    } else if (sortedSongs.isEmpty) {
+      body = _message(
+        icon: Icons.library_music_outlined,
+        text: 'No music found on your device.',
+        buttonLabel: 'Scan again',
+        onPressed: () {
+          playerState.loadLibrary();
+        },
+      );
+    } else {
+      body = RefreshIndicator(
+        onRefresh: playerState.loadLibrary,
+        child: ListView.builder(
+          physics: const AlwaysScrollableScrollPhysics(),
+          itemCount: sortedSongs.length,
+          itemBuilder: (context, index) {
+            final song = sortedSongs[index];
+
+            return ListTile(
+              key: ValueKey(song.id),
+              leading: SongArtwork(
+                songId: song.id,
+                size: 48,
+                borderRadius: 4,
+              ),
+              title: Text(
+                song.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                song.artist,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              onTap: () {
+                playerState.playFromLibrary(song, sortedSongs);
+              },
+            );
+          },
+        ),
+      );
+    }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Your Library')),
-      body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        behavior: HitTestBehavior.opaque,
-        child: Column(
-          children: [
-            SearchSortBar(
-              focusNode: _searchFocusNode,
-              onQueryChanged: (value) => setState(() => _query = value),
-              currentSort: _sortOption,
-              onSortChanged: (option) => setState(() => _sortOption = option),
-            ),
-            Expanded(
-              child: playerState.songs.isEmpty
-                  ? const Center(child: CircularProgressIndicator())
-                  : displayedSongs.isEmpty
-                      ? const Center(child: Text('No matches'))
-                      : ListView.builder(
-                          itemCount: displayedSongs.length,
-                          itemBuilder: (context, index) {
-                            final song = displayedSongs[index];
-                            return ListTile(
-                              leading: SongArtwork(songId: song.id, size: 48, borderRadius: 4),
-                              title: Text(song.title),
-                              subtitle: Text(song.artist),
-                              onTap: () => context.read<PlayerState>().playFromLibrary(song, displayedSongs),
-                            );
-                          },
-                        ),
-            ),
-          ],
+      appBar: AppBar(
+        title: const Text('Your Library'),
+        actions: [
+          PopupMenuButton<SortOption>(
+            icon: const Icon(Icons.sort),
+            onSelected: (option) {
+              setState(() => _sortOption = option);
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: SortOption.title,
+                child: Text('Sort by Title'),
+              ),
+              PopupMenuItem(
+                value: SortOption.artist,
+                child: Text('Sort by Artist'),
+              ),
+            ],
+          ),
+        ],
       ),
-      )
+      body: body,
     );
   }
 }
