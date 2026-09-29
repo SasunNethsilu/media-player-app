@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import '../models/song.dart';
 import '../services/library_scanner.dart';
+import 'package:audio_service/audio_service.dart';
 
 class PlayerState extends ChangeNotifier {
   final AudioPlayer _player = AudioPlayer();
@@ -34,8 +35,20 @@ class PlayerState extends ChangeNotifier {
 
   Future<void> play(Song song) async {
     _currentSong = song;
-    await _player.setFilePath(song.path);
+    await _player.setAudioSource(
+      AudioSource.uri(
+        Uri.file(song.path),
+        tag: MediaItem(
+          id: song.id.toString(),
+          title: song.title,
+          artist: song.artist,
+          album: song.album,
+          duration: Duration(milliseconds: song.durationMs),
+        ),
+      ),
+    );
     _player.play();
+    notifyListeners();
   }
 
   Future<void> playFromLibrary(Song song) async {
