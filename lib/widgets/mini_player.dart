@@ -41,12 +41,20 @@ class MiniPlayer extends StatelessWidget {
               )
               ),
               IconButton(
+                icon: const Icon(Icons.skip_previous, color: Colors.white),
+                onPressed: () => playerState.playPrevious(),
+                ),
+              IconButton(
               icon: Icon(
                 playerState.playing ? Icons.pause : Icons.play_arrow,
                 color: Colors.white,),
-              onPressed: () => playerState.togglePlayPause(),
-            ),
-            const SizedBox(width: 8),
+                onPressed: () => playerState.togglePlayPause(),
+              ),
+              IconButton(
+                icon: const Icon(Icons.skip_next, color: Colors.white),
+                onPressed: () => playerState.playNext(),
+              ),
+            const SizedBox(width: 4),
           ],
         ),
       ),

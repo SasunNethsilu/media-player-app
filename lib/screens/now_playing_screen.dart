@@ -87,10 +87,27 @@ class NowPlayingScreen extends StatelessWidget {
             ),
 
             const SizedBox(height: 16),
-            IconButton(
-              iconSize: 56,
-              icon: Icon(playerState.playing ? Icons.pause_circle_filled : Icons.play_circle_filled),
-              onPressed: () => playerState.togglePlayPause(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  iconSize: 40,
+                  icon: const Icon(Icons.skip_previous),
+                  onPressed: () => playerState.playPrevious(),
+                ),
+                const SizedBox(width: 16),
+                IconButton(
+                  iconSize: 56,
+                  icon: Icon(playerState.playing ? Icons.pause_circle_filled : Icons.play_circle_filled),
+                  onPressed: () => playerState.togglePlayPause(),
+                ),
+                const SizedBox(width: 16),
+                IconButton(
+                  iconSize: 40,
+                  icon: const Icon(Icons.skip_next),
+                  onPressed: () => playerState.playNext(),
+                ),
+              ],
             ),
           ],
         ),

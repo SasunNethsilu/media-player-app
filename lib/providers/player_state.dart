@@ -7,6 +7,7 @@ class PlayerState extends ChangeNotifier {
   final AudioPlayer _player = AudioPlayer();
   List<Song> _songs = [];
   List<Song> _queue = [];
+  final List<Song> _history = [];
   Song? _currentSong;
 
   PlayerState() {
@@ -45,8 +46,20 @@ class PlayerState extends ChangeNotifier {
 
   Future<void> playNext() async {
     if (_queue.isEmpty) return;
+    if (_currentSong != null) _history.add(_currentSong!);
     final next = _queue.removeAt(0);
     await play(next);
+  }
+
+  Future<void> playPrevious() async {
+    if (_player.position > const Duration(seconds: 3) || _history.isEmpty) {
+      await _player.seek(Duration.zero);
+      return;
+    }
+
+    if (_currentSong != null) _queue.insert(0, _currentSong!);
+    final prev = _history.removeLast();
+    await play(prev);
   }
 
   void reorderQueue(int oldIndex, int newIndex) {
