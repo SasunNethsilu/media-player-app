@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/player_state.dart';
 import '../screens/now_playing_screen.dart';
+import '../widgets/song_artwork.dart';
 
 class MiniPlayer extends StatelessWidget {
   const MiniPlayer({super.key});
@@ -26,6 +27,8 @@ class MiniPlayer extends StatelessWidget {
         child: Row(
           children: [
             const SizedBox(width: 12),
+            SongArtwork(songId: song.id, size: 48, borderRadius: 4),
+            const SizedBox(width: 8),
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/player_state.dart';
+import '../widgets/song_artwork.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -29,6 +30,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           itemBuilder: (context, index) {
             final song = playerState.songs[index];
             return ListTile(
+              leading: SongArtwork(songId: song.id, size: 48, borderRadius: 4),
               title: Text(song.title),
               subtitle: Text(song.artist),
               onTap:() => context.read<PlayerState>().playFromLibrary(song),

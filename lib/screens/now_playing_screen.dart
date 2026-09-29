@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/player_state.dart';
 import 'queue_screen.dart';
+import '../widgets/song_artwork.dart';
 
 class NowPlayingScreen extends StatelessWidget {
   const NowPlayingScreen({super.key});
@@ -38,15 +39,7 @@ class NowPlayingScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 260,
-              height: 260,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.music_note, size: 80, color: Colors.grey),
-            ),
+            SongArtwork(songId: song.id, size: 260, borderRadius: 12),
             const SizedBox(height: 32),
             Text(song.title, style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 4),
