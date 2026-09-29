@@ -17,9 +17,11 @@ class MiniPlayer extends StatelessWidget {
     
     return GestureDetector(
       onTap: () {
-        Navigator.push(context,
-         MaterialPageRoute(builder: (context) => const NowPlayingScreen())
-         );
+        FocusScope.of(context).unfocus();
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const NowPlayingScreen()),
+          );
       },
       child: Container(
         height: 64,

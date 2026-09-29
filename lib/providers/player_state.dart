@@ -51,7 +51,7 @@ class PlayerState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> playFromLibrary(Song song) async {
+  Future<void> playFromLibrary(Song song, List<Song> fromList) async {
     final startIndex = _songs.indexOf(song);
     _queue = _songs.sublist(startIndex + 1);
     await play(song);
