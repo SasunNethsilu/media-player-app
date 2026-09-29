@@ -11,7 +11,12 @@ import '../providers/player_state.dart';
 import 'queue_screen.dart';
 
 class NowPlayingScreen extends StatelessWidget {
-  const NowPlayingScreen({super.key});
+  final ColorScheme? initialColorScheme;
+
+  const NowPlayingScreen({
+    super.key,
+    this.initialColorScheme,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +33,7 @@ class NowPlayingScreen extends StatelessWidget {
     return _TrackPlayer(
       song: song,
       playerState: playerState,
+      initialColorScheme: initialColorScheme,
     );
   }
 }
@@ -35,10 +41,12 @@ class NowPlayingScreen extends StatelessWidget {
 class _TrackPlayer extends StatefulWidget {
   final Song song;
   final PlayerState playerState;
+  final ColorScheme? initialColorScheme;
 
   const _TrackPlayer({
     required this.song,
     required this.playerState,
+    this.initialColorScheme,
   });
 
   @override
@@ -60,6 +68,9 @@ class _TrackPlayerState extends State<_TrackPlayer> {
   @override
   void initState() {
     super.initState();
+
+    _scheme = widget.initialColorScheme ?? _fallbackScheme;
+
     _loadVisuals();
   }
 
