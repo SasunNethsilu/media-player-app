@@ -31,7 +31,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             return ListTile(
               title: Text(song.title),
               subtitle: Text(song.artist),
-              onTap:() => context.read<PlayerState>().play(song),
+              onTap:() => context.read<PlayerState>().playFromLibrary(song),
             );
           },
       ),
