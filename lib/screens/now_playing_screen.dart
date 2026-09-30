@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:on_audio_query_pluse/on_audio_query.dart';
+import '../services/artwork_palette_service.dart';
 import 'package:provider/provider.dart';
 
 import '../models/song.dart';
@@ -54,22 +54,25 @@ class _TrackPlayer extends StatefulWidget {
 }
 
 class _TrackPlayerState extends State<_TrackPlayer> {
-  static final ColorScheme _fallbackScheme = ColorScheme.fromSeed(
-    seedColor: const Color(0xFF7189B8),
-    brightness: Brightness.dark,
-  );
+  ColorScheme _scheme = ArtworkPaletteService.fallbackScheme;
 
-  ColorScheme _scheme = _fallbackScheme;
   Uint8List? _artwork;
   double? _dragPosition;
-
+  int? _artworkSongId;
   int _visualRequest = 0;
 
   @override
   void initState() {
     super.initState();
 
-    _scheme = widget.initialColorScheme ?? _fallbackScheme;
+    final cached = ArtworkPaletteService.shared.peek(widget.song.id);
+
+    _scheme = cached?.scheme ??
+        widget.initialColorScheme ??
+        ArtworkPaletteService.fallbackScheme;
+
+    _artwork = cached?.artwork;
+    _artworkSongId = cached == null ? null : widget.song.id;
 
     _loadVisuals();
   }
@@ -80,7 +83,6 @@ class _TrackPlayerState extends State<_TrackPlayer> {
 
     if (oldWidget.song.id != widget.song.id) {
       _dragPosition = null;
-      _artwork = null;
       _loadVisuals();
     }
   }
@@ -89,37 +91,30 @@ class _TrackPlayerState extends State<_TrackPlayer> {
     final request = ++_visualRequest;
     final songId = widget.song.id;
 
-    Uint8List? bytes;
-    ColorScheme scheme = _fallbackScheme;
+    final visuals = await ArtworkPaletteService.shared.load(songId);
 
-    try {
-      bytes = await OnAudioQuery().queryArtwork(
-        songId,
-        ArtworkType.AUDIO,
-        size: 800,
-        quality: 100,
+    if (!mounted || request != _visualRequest) return;
+
+    final bytes = visuals.artwork;
+    bool imageFailed = false;
+
+    if (bytes != null) {
+      await precacheImage(
+        MemoryImage(bytes),
+        context,
+        onError: (Object error, StackTrace? stackTrace) {
+          imageFailed = true;
+          debugPrint('Artwork decoding failed for $songId: $error');
+        },
       );
-
-      if (!mounted || request != _visualRequest) return;
-
-      if (bytes != null && bytes.isNotEmpty) {
-        setState(() => _artwork = bytes);
-
-        scheme = await ColorScheme.fromImageProvider(
-          provider: MemoryImage(bytes),
-          brightness: Brightness.dark,
-          dynamicSchemeVariant: DynamicSchemeVariant.vibrant,
-        );
-      }
-    } catch (error) {
-      debugPrint('Could not load player artwork/colours: $error');
     }
 
     if (!mounted || request != _visualRequest) return;
 
     setState(() {
-      _artwork = bytes;
-      _scheme = scheme;
+      _artwork = imageFailed ? null : bytes;
+      _artworkSongId = songId;
+      _scheme = visuals.scheme;
     });
   }
 
@@ -155,12 +150,14 @@ class _TrackPlayerState extends State<_TrackPlayer> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(26),
         child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 350),
+          duration: const Duration(milliseconds: 220),
+          switchInCurve: Curves.easeInOut,
+          switchOutCurve: Curves.easeInOut,
           child: _artwork == null
               ? _artworkPlaceholder(size)
               : Image.memory(
                   _artwork!,
-                  key: ValueKey('art-${widget.song.id}'),
+                  key: ValueKey('art-$_artworkSongId'),
                   width: size,
                   height: size,
                   fit: BoxFit.cover,

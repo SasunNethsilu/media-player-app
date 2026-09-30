@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:on_audio_query_pluse/on_audio_query.dart';
+import '../services/artwork_palette_service.dart';
 import 'package:provider/provider.dart';
-
 import '../models/song.dart';
 import '../providers/player_state.dart';
 import '../screens/now_playing_screen.dart';
@@ -38,21 +37,19 @@ class _MiniPlayerCard extends StatefulWidget {
 }
 
 class _MiniPlayerCardState extends State<_MiniPlayerCard> {
-  static final ColorScheme _fallbackScheme = ColorScheme.fromSeed(
-    seedColor: const Color(0xFF7189B8),
-    brightness: Brightness.dark,
-  );
+  ColorScheme _scheme = ArtworkPaletteService.fallbackScheme;
 
-  static final Map<int, ColorScheme> _paletteCache = {};
-
-  ColorScheme _scheme = _fallbackScheme;
   int _colourRequest = 0;
+  int? _prefetchedNextId;
+
   bool _openingPlayer = false;
+  bool _coloursReady = false;
 
   @override
   void initState() {
     super.initState();
     _loadColours();
+    _preloadNext();
   }
 
   @override
@@ -62,53 +59,44 @@ class _MiniPlayerCardState extends State<_MiniPlayerCard> {
     if (oldWidget.song.id != widget.song.id) {
       _loadColours();
     }
+
+    _preloadNext();
   }
 
   Future<void> _loadColours() async {
     final request = ++_colourRequest;
     final songId = widget.song.id;
+    final service = ArtworkPaletteService.shared;
 
-    final cached = _paletteCache[songId];
+    final cached = service.peek(songId);
 
     if (cached != null) {
-      _scheme = cached;
+      _scheme = cached.scheme;
+      _coloursReady = true;
       return;
     }
 
-    ColorScheme scheme = _fallbackScheme;
-
-    try {
-      final bytes = await OnAudioQuery().queryArtwork(
-        songId,
-        ArtworkType.AUDIO,
-        size: 800,
-        quality: 100,
-      );
-
-      if (!mounted || request != _colourRequest) return;
-
-      if (bytes != null && bytes.isNotEmpty) {
-        scheme = await ColorScheme.fromImageProvider(
-          provider: MemoryImage(bytes),
-          brightness: Brightness.dark,
-          dynamicSchemeVariant: DynamicSchemeVariant.vibrant,
-        );
-      }
-
-      if (!mounted || request != _colourRequest) return;
-
-      if (_paletteCache.length >= 24) {
-        _paletteCache.remove(_paletteCache.keys.first);
-      }
-
-      _paletteCache[songId] = scheme;
-    } catch (error) {
-      debugPrint('Mini-player colour extraction failed: $error');
-    }
+    final visuals = await service.load(songId);
 
     if (!mounted || request != _colourRequest) return;
 
-    setState(() => _scheme = scheme);
+    setState(() {
+      _scheme = visuals.scheme;
+      _coloursReady = true;
+    });
+  }
+
+  void _preloadNext() {
+    final queue = widget.playerState.queue;
+    final nextId = queue.isEmpty ? null : queue.first.id;
+
+    if (nextId == _prefetchedNextId) return;
+
+    _prefetchedNextId = nextId;
+
+    if (nextId != null) {
+      ArtworkPaletteService.shared.preload(nextId);
+    }
   }
 
   Future<void> _openPlayer() async {
@@ -130,7 +118,7 @@ class _MiniPlayerCardState extends State<_MiniPlayerCard> {
           ),
           pageBuilder: (_, animation, secondaryAnimation) {
             return NowPlayingScreen(
-              initialColorScheme: _scheme,
+              initialColorScheme: _coloursReady ? _scheme : null,
             );
           },
           transitionsBuilder: (

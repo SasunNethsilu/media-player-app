@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/player_state.dart';
 import '../services/song_filter.dart';
-import '../widgets/song_artwork.dart';
+import '../widgets/song_tile.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -38,15 +38,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 48, color: Colors.white54),
-            const SizedBox(height: 16),
+            Icon(icon, size: 48, color: Colors.white24),
+            const SizedBox(height: 18),
             Text(
               text,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70),
+              style: const TextStyle(
+                color: Colors.white60,
+                height: 1.5,
+              ),
             ),
             const SizedBox(height: 20),
-            FilledButton(
+            FilledButton.tonal(
               onPressed: onPressed,
               child: Text(buttonLabel),
             ),
@@ -58,64 +61,47 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final playerState = context.watch<PlayerState>();
-    final sortedSongs = filterAndSortSongs(
-      playerState.songs,
-      '',
-      _sortOption,
-    );
+    final state = context.watch<PlayerState>();
+    final songs = filterAndSortSongs(state.songs, '', _sortOption);
 
-    Widget body;
+    Widget content;
 
-    if (playerState.isLoadingLibrary) {
-      body = const Center(child: CircularProgressIndicator());
-    } else if (playerState.libraryError != null) {
-      body = _message(
-        icon: Icons.info_outline,
-        text: playerState.libraryError!,
-        buttonLabel: 'Try again',
-        onPressed: () {
-          playerState.loadLibrary();
-        },
+    if (state.isLoadingLibrary) {
+      content = const Center(
+        child: CircularProgressIndicator(strokeWidth: 2),
       );
-    } else if (sortedSongs.isEmpty) {
-      body = _message(
+    } else if (state.libraryError != null) {
+      content = _message(
+        icon: Icons.info_outline_rounded,
+        text: state.libraryError!,
+        buttonLabel: 'Try again',
+        onPressed: () => state.loadLibrary(),
+      );
+    } else if (songs.isEmpty) {
+      content = _message(
         icon: Icons.library_music_outlined,
-        text: 'No music found on your device.',
-        buttonLabel: 'Scan again',
-        onPressed: () {
-          playerState.loadLibrary();
-        },
+        text: 'Your music belongs here.\nAdd songs to your device to get started.',
+        buttonLabel: 'Scan for music',
+        onPressed: () => state.loadLibrary(),
       );
     } else {
-      body = RefreshIndicator(
-        onRefresh: playerState.loadLibrary,
-        child: ListView.builder(
+      content = RefreshIndicator(
+        onRefresh: state.loadLibrary,
+        child: ListView.separated(
+          key: const PageStorageKey('library-songs'),
           physics: const AlwaysScrollableScrollPhysics(),
-          itemCount: sortedSongs.length,
+          padding: const EdgeInsets.fromLTRB(8, 4, 8, 16),
+          itemCount: songs.length,
+          separatorBuilder: (_, index) => const SizedBox(height: 3),
           itemBuilder: (context, index) {
-            final song = sortedSongs[index];
+            final song = songs[index];
 
-            return ListTile(
+            return SongTile(
               key: ValueKey(song.id),
-              leading: SongArtwork(
-                songId: song.id,
-                size: 48,
-                borderRadius: 4,
-              ),
-              title: Text(
-                song.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                song.artist,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              onTap: () {
-                playerState.playFromLibrary(song, sortedSongs);
-              },
+              song: song,
+              isCurrent: state.currentSong?.id == song.id,
+              isPlaying: state.playing,
+              onTap: () => state.playFromLibrary(song, songs),
             );
           },
         ),
@@ -124,27 +110,102 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Your Library'),
-        actions: [
-          PopupMenuButton<SortOption>(
-            icon: const Icon(Icons.sort),
-            onSelected: (option) {
-              setState(() => _sortOption = option);
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: SortOption.title,
-                child: Text('Sort by Title'),
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Your Library'),
+            SizedBox(height: 5),
+            Text(
+              'All your music, in one place.',
+              style: TextStyle(
+                color: Colors.white38,
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                letterSpacing: 0,
               ),
-              PopupMenuItem(
-                value: SortOption.artist,
-                child: Text('Sort by Artist'),
-              ),
-            ],
+            ),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 12, 12),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 15,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF292D38),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: const Text(
+                    'Songs',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '${songs.length} tracks',
+                  style: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 12,
+                  ),
+                ),
+                const Spacer(),
+                PopupMenuButton<SortOption>(
+                  tooltip: 'Sort songs',
+                  initialValue: _sortOption,
+                  onSelected: (option) {
+                    setState(() => _sortOption = option);
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: SortOption.title,
+                      child: Text('Song title'),
+                    ),
+                    PopupMenuItem(
+                      value: SortOption.artist,
+                      child: Text('Artist name'),
+                    ),
+                  ],
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _sortOption == SortOption.title
+                              ? 'Title'
+                              : 'Artist',
+                          style: const TextStyle(
+                            color: Colors.white60,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Icon(
+                          Icons.sort_rounded,
+                          color: Colors.white60,
+                          size: 20,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
+          Expanded(child: content),
         ],
       ),
-      body: body,
     );
   }
 }

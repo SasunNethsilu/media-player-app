@@ -1,6 +1,6 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:on_audio_query_pluse/on_audio_query.dart';
+
+import '../services/artwork_palette_service.dart';
 
 class SongArtwork extends StatefulWidget {
   final int songId;
@@ -19,75 +19,78 @@ class SongArtwork extends StatefulWidget {
 }
 
 class _SongArtworkState extends State<SongArtwork> {
-  static final Map<int, Uint8List?> _cache = {};
-
-  late Future<Uint8List?> _artworkFuture;
+  late Future<SongVisuals> _visualsFuture;
 
   @override
   void initState() {
     super.initState();
-    _artworkFuture = _fetchArtwork();
+    _load();
   }
 
   @override
   void didUpdateWidget(covariant SongArtwork oldWidget) {
     super.didUpdateWidget(oldWidget);
+
     if (oldWidget.songId != widget.songId) {
-      setState(() {
-        _artworkFuture = _fetchArtwork();
-      });
+      _load();
     }
   }
 
-  Future<Uint8List?> _fetchArtwork() async {
-    final songId = widget.songId;
+  void _load() {
+    _visualsFuture = ArtworkPaletteService.shared.load(
+      widget.songId,
+      priority: false,
+    );
+  }
 
-    if (_cache.containsKey(songId)) {
-      return _cache[songId];
-    }
-
-    try {
-      final bytes = await OnAudioQuery().queryArtwork(
-        songId,
-        ArtworkType.AUDIO,
-        size: 800,
-        quality: 100,
-      );
-
-      _cache[songId] = bytes;
-      return bytes;
-    } catch (error) {
-      // Don't cache failed requests, so a later request can retry.
-      debugPrint('Artwork lookup failed for $songId: $error');
-      return null;
-    }
+  Widget _placeholder() {
+    return Container(
+      key: const ValueKey('placeholder'),
+      width: widget.size,
+      height: widget.size,
+      color: const Color(0xFF272A32),
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.music_note_rounded,
+        size: widget.size * 0.4,
+        color: Colors.white38,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Uint8List?>(
+    final cached = ArtworkPaletteService.shared.peek(widget.songId);
+
+    final decodeWidth =
+        (widget.size * MediaQuery.of(context).devicePixelRatio)
+            .round()
+            .clamp(1, 800)
+            .toInt();
+
+    return FutureBuilder<SongVisuals>(
       key: ValueKey(widget.songId),
-      future: _artworkFuture,
+      future: _visualsFuture,
+      initialData: cached,
       builder: (context, snapshot) {
-        final bytes = snapshot.data;
+        final bytes = snapshot.data?.artwork;
+
         return ClipRRect(
           borderRadius: BorderRadius.circular(widget.borderRadius),
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 200),
-            child: bytes != null
-                ? Image.memory(
+            child: bytes == null
+                ? _placeholder()
+                : Image.memory(
                     bytes,
-                    key: ValueKey('art_${widget.songId}'), // required, tells AnimatedSwitcher this is a "new" child
+                    key: ValueKey('art-${widget.songId}'),
                     width: widget.size,
                     height: widget.size,
+                    cacheWidth: decodeWidth,
                     fit: BoxFit.cover,
-                  )
-                : Container(
-                    key: const ValueKey('placeholder'),
-                    width: widget.size,
-                    height: widget.size,
-                    color: Colors.grey[300],
-                    child: Icon(Icons.music_note, size: widget.size * 0.4, color: Colors.grey),
+                    errorBuilder: (_, error, stackTrace) {
+                      return _placeholder();
+                    },
                   ),
           ),
         );
