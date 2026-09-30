@@ -142,6 +142,29 @@ class PlayerState extends ChangeNotifier {
 
   bool get playing => _player.playing;
 
+  Future<void> enqueueNext(Song song) async {
+    if (_currentSong == null) {
+      await playFromLibrary(song, [song]);
+      return;
+    }
+
+    _queue.removeWhere((item) => item.id == song.id);
+    _queue.insert(0, song);
+    notifyListeners();
+  }
+
+  Future<void> enqueueLast(Song song) async {
+    if (_currentSong == null) {
+      await playFromLibrary(song, [song]);
+      return;
+    }
+
+    if (_queue.any((item) => item.id == song.id)) return;
+
+    _queue.add(song);
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _isDisposed = true;
