@@ -34,7 +34,10 @@ class LocalPlaylist {
 class LibraryCollections extends ChangeNotifier {
   static const _storageKey = 'local_music_collections_v1';
 
-  final _prefs = SharedPreferencesAsync();
+  final SharedPreferencesAsync _prefs;
+
+  LibraryCollections({SharedPreferencesAsync? preferences})
+    : _prefs = preferences ?? SharedPreferencesAsync();
 
   List<int> _recentIds = [];
   final List<LocalPlaylist> _playlists = [];
@@ -150,6 +153,44 @@ class LibraryCollections extends ChangeNotifier {
   void deletePlaylist(String id) {
     _playlists.removeWhere((playlist) => playlist.id == id);
     _changed();
+  }
+
+  Future<void> renamePlaylist(String id, String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) throw ArgumentError.value(name, 'name');
+    final index = _playlists.indexWhere((playlist) => playlist.id == id);
+    if (index == -1 || _playlists[index].name == trimmed) return;
+    final old = _playlists[index];
+    _playlists[index] = LocalPlaylist(
+      id: old.id,
+      name: trimmed,
+      songIds: old.songIds,
+    );
+    _changed();
+    await _pendingWrites;
+  }
+
+  Future<void> removePlaylistSong(String id, int songId) async {
+    final playlist = playlistById(id);
+    if (playlist == null || !playlist.songIds.contains(songId)) return;
+    setPlaylistSongs(id, playlist.songIds.where((item) => item != songId));
+    await _pendingWrites;
+  }
+
+  Future<void> reorderPlaylistSong(
+    String id,
+    int songId,
+    int targetSongId,
+  ) async {
+    final playlist = playlistById(id);
+    if (playlist == null || songId == targetSongId) return;
+    final ids = playlist.songIds.toList();
+    final oldIndex = ids.indexOf(songId);
+    final newIndex = ids.indexOf(targetSongId);
+    if (oldIndex == -1 || newIndex == -1) return;
+    ids.insert(newIndex, ids.removeAt(oldIndex));
+    setPlaylistSongs(id, ids);
+    await _pendingWrites;
   }
 
   void _changed() {

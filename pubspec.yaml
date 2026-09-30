@@ -36,6 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   on_audio_query_pluse: ^3.0.6
   just_audio: ^0.9.40
+  audio_service: ^0.18.19
   provider: ^6.1.2
   just_audio_background: any
   shared_preferences: ^2.5.5

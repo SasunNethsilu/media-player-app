@@ -6,11 +6,7 @@ import '../providers/library_collections.dart';
 import '../providers/player_state.dart';
 import 'song_artwork.dart';
 
-enum _SongAction {
-  playNext,
-  addToQueue,
-  addToPlaylist,
-}
+enum _SongAction { playNext, addToQueue, addToPlaylist, removeFromPlaylist }
 
 class SongTile extends StatelessWidget {
   final Song song;
@@ -19,6 +15,8 @@ class SongTile extends StatelessWidget {
   final bool isPlaying;
   final Widget? trailing;
   final Color? accentColor;
+  final VoidCallback? onRemoveFromPlaylist;
+  final Widget? dragHandle;
 
   const SongTile({
     super.key,
@@ -28,6 +26,8 @@ class SongTile extends StatelessWidget {
     this.isPlaying = false,
     this.trailing,
     this.accentColor,
+    this.onRemoveFromPlaylist,
+    this.dragHandle,
   });
 
   void _showMessage(BuildContext context, String message) {
@@ -300,6 +300,10 @@ class SongTile extends StatelessWidget {
     _SongAction action,
     Color accent,
   ) async {
+    if (action == _SongAction.removeFromPlaylist) {
+      onRemoveFromPlaylist?.call();
+      return;
+    }
     if (action == _SongAction.addToPlaylist) {
       await _addToPlaylist(context, accent);
       return;
@@ -324,6 +328,7 @@ class SongTile extends StatelessWidget {
           await player.enqueueLast(song);
           break;
         case _SongAction.addToPlaylist:
+        case _SongAction.removeFromPlaylist:
           return;
       }
 
@@ -414,8 +419,8 @@ class SongTile extends StatelessWidget {
                   onSelected: (action) {
                     _handleAction(context, action, accent);
                   },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
                       value: _SongAction.playNext,
                       child: Row(
                         children: [
@@ -425,7 +430,7 @@ class SongTile extends StatelessWidget {
                         ],
                       ),
                     ),
-                    PopupMenuItem(
+                    const PopupMenuItem(
                       value: _SongAction.addToQueue,
                       child: Row(
                         children: [
@@ -435,7 +440,7 @@ class SongTile extends StatelessWidget {
                         ],
                       ),
                     ),
-                    PopupMenuItem(
+                    const PopupMenuItem(
                       value: _SongAction.addToPlaylist,
                       child: Row(
                         children: [
@@ -445,8 +450,14 @@ class SongTile extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (onRemoveFromPlaylist != null)
+                      const PopupMenuItem(
+                        value: _SongAction.removeFromPlaylist,
+                        child: Text('Remove from this playlist'),
+                      ),
                   ],
                 ),
+                ?dragHandle,
               ],
             ),
       ),

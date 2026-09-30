@@ -12,15 +12,53 @@ import '../widgets/song_tile.dart';
 class PlaylistScreen extends StatelessWidget {
   final String playlistId;
 
-  const PlaylistScreen({
-    super.key,
-    required this.playlistId,
-  });
+  const PlaylistScreen({super.key, required this.playlistId});
 
-  Future<void> _editSongs(
-    BuildContext context,
-    LocalPlaylist playlist,
-  ) async {
+  Future<void> _rename(BuildContext context, LocalPlaylist playlist) async {
+    final formKey = GlobalKey<FormState>();
+    var name = playlist.name;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        void submit() {
+          if (formKey.currentState!.validate()) {
+            Navigator.pop(dialogContext, name.trim());
+          }
+        }
+
+        return AlertDialog(
+          title: const Text('Rename playlist'),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              initialValue: playlist.name,
+              autofocus: true,
+              maxLength: 60,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(labelText: 'Playlist name'),
+              onChanged: (value) => name = value,
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Enter a playlist name'
+                  : null,
+              onFieldSubmitted: (_) => submit(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(onPressed: submit, child: const Text('Save')),
+          ],
+        );
+      },
+    );
+    if (!context.mounted || result == null) return;
+    await context.read<LibraryCollections>().renamePlaylist(playlistId, result);
+  }
+
+  Future<void> _editSongs(BuildContext context, LocalPlaylist playlist) async {
     final player = context.read<PlayerState>();
     final collections = context.read<LibraryCollections>();
 
@@ -93,20 +131,20 @@ class PlaylistScreen extends StatelessWidget {
   Future<void> _play(
     BuildContext context,
     List<Song> songs, {
-    bool shuffle = false,
+    bool? shuffle,
   }) async {
     if (songs.isEmpty) return;
 
     final player = context.read<PlayerState>();
 
     final queue = List<Song>.of(songs);
-    if (shuffle) queue.shuffle();
 
     try {
       await player.playFromLibrary(
         queue.first,
         queue,
         playlistId: playlistId,
+        shuffle: shuffle,
       );
     } catch (error) {
       debugPrint('Playlist playback failed: $error');
@@ -140,7 +178,7 @@ class PlaylistScreen extends StatelessWidget {
     );
 
     final isActivePlaylist = player.activePlaylistId == playlistId;
-    final showPause = isActivePlaylist && player.playing;
+    final showPause = isActivePlaylist && player.playPauseShowsPause;
 
     final coverSongs = <Song>[];
     final seenAlbums = <String>{};
@@ -189,11 +227,18 @@ class PlaylistScreen extends StatelessWidget {
                 tooltip: 'Playlist options',
                 icon: const Icon(Icons.more_horiz_rounded),
                 onSelected: (value) {
+                  if (value == 'rename') {
+                    _rename(context, playlist);
+                  }
                   if (value == 'delete') {
                     _delete(context, playlist);
                   }
                 },
                 itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'rename',
+                    child: Text('Rename playlist'),
+                  ),
                   PopupMenuItem(
                     value: 'delete',
                     child: Text('Delete playlist'),
@@ -300,13 +345,22 @@ class PlaylistScreen extends StatelessWidget {
                               child: OutlinedButton.icon(
                                 onPressed: songs.isEmpty
                                     ? null
-                                    : () => _play(
-                                          context,
-                                          songs,
-                                          shuffle: true,
-                                        ),
+                                    : () {
+                                        if (isActivePlaylist) {
+                                          player.toggleShuffle();
+                                        } else {
+                                          _play(
+                                            context,
+                                            songs,
+                                            shuffle: true,
+                                          );
+                                        }
+                                      },
                                 style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.white,
+                                  foregroundColor: isActivePlaylist &&
+                                          player.shuffleEnabled
+                                      ? scheme.primary
+                                      : Colors.white,
                                   minimumSize: const Size(0, 52),
                                   side: const BorderSide(
                                     color: Colors.white24,
@@ -398,29 +452,60 @@ class PlaylistScreen extends StatelessWidget {
                   ),
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(8, 0, 8, 32),
-                    sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final song = songs[index];
+                    sliver: SliverReorderableList(
+                      itemCount: songs.length,
+                      onReorderItem: (oldIndex, newIndex) {
+                        collections.reorderPlaylistSong(
+                          playlistId,
+                          songs[oldIndex].id,
+                          songs[newIndex].id,
+                        );
+                      },
+                      proxyDecorator: (child, index, animation) => Material(
+                        color: const Color(0xFF252832),
+                        elevation: 8,
+                        borderRadius: BorderRadius.circular(16),
+                        child: child,
+                      ),
+                      itemBuilder: (context, index) {
+                        final song = songs[index];
 
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 3),
-                            child: SongTile(
-                              key: ValueKey(song.id),
-                              song: song,
-                              accentColor: scheme.primary,
-                              isCurrent: player.currentSong?.id == song.id,
-                              isPlaying: player.playing,
-                              onTap: () => player.playFromLibrary(
-                                song,
-                                List<Song>.of(songs),
-                                playlistId: playlistId,
+                        return Padding(
+                          key: ValueKey(song.id),
+                          padding: const EdgeInsets.only(bottom: 3),
+                          child: SongTile(
+                            song: song,
+                            onRemoveFromPlaylist: () {
+                              collections.removePlaylistSong(
+                                playlistId,
+                                song.id,
+                              );
+                            },
+                            dragHandle: ReorderableDragStartListener(
+                              index: index,
+                              child: const Tooltip(
+                                message: 'Drag to reorder',
+                                child: SizedBox(
+                                  width: 48,
+                                  height: 48,
+                                  child: Icon(
+                                    Icons.drag_handle_rounded,
+                                    color: Colors.white54,
+                                  ),
+                                ),
                               ),
                             ),
-                          );
-                        },
-                        childCount: songs.length,
-                      ),
+                            accentColor: scheme.primary,
+                            isCurrent: player.currentSong?.id == song.id,
+                            isPlaying: player.playing,
+                            onTap: () => player.playFromLibrary(
+                              song,
+                              List<Song>.of(songs),
+                              playlistId: playlistId,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],

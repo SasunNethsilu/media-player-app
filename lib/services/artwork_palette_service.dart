@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -30,7 +29,7 @@ class ArtworkPaletteService {
 
   final _query = OnAudioQuery();
 
-  final _cache = LinkedHashMap<int, SongVisuals>();
+  final _cache = <int, SongVisuals>{};
   final _inFlight = <int, Future<SongVisuals>>{};
   final _pending = <_VisualJob>[];
 

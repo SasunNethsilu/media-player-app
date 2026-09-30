@@ -57,6 +57,8 @@ class _MiniPlayerCardState extends State<_MiniPlayerCard> {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.song.id != widget.song.id) {
+      _scheme = ArtworkPaletteService.fallbackScheme;
+      _coloursReady = false;
       _loadColours();
     }
 
@@ -155,15 +157,17 @@ class _MiniPlayerCardState extends State<_MiniPlayerCard> {
       stream: player.durationStream,
       initialData: player.duration,
       builder: (context, durationSnapshot) {
-        final totalMs =
-            (durationSnapshot.data ?? Duration.zero).inMilliseconds;
+        final totalMs = widget.playerState.canSeek
+            ? (durationSnapshot.data ?? Duration.zero).inMilliseconds
+            : 0;
 
         return StreamBuilder<Duration>(
           stream: player.positionStream,
           initialData: player.position,
           builder: (context, positionSnapshot) {
-            final positionMs =
-                (positionSnapshot.data ?? Duration.zero).inMilliseconds;
+            final positionMs = widget.playerState.canSeek
+                ? (positionSnapshot.data ?? Duration.zero).inMilliseconds
+                : 0;
 
             final progress = totalMs <= 0
                 ? 0.0
@@ -269,7 +273,11 @@ class _MiniPlayerCardState extends State<_MiniPlayerCard> {
                                 ),
                                 const SizedBox(height: 3),
                                 Text(
-                                  widget.song.artist,
+                                  state.playbackError != null
+                                      ? 'Unable to play · Tap to view'
+                                      : state.isLoadingTrack
+                                          ? 'Loading track…'
+                                          : widget.song.artist,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
@@ -288,7 +296,7 @@ class _MiniPlayerCardState extends State<_MiniPlayerCard> {
                             icon: const Icon(Icons.skip_previous_rounded),
                           ),
                           IconButton(
-                            tooltip: state.playing ? 'Pause' : 'Play',
+                            tooltip: state.playPauseShowsPause ? 'Pause' : 'Play',
                             style: IconButton.styleFrom(
                               backgroundColor: _scheme.primary,
                               foregroundColor: _scheme.onPrimary,
@@ -300,21 +308,21 @@ class _MiniPlayerCardState extends State<_MiniPlayerCard> {
                                 milliseconds: reduceMotion ? 0 : 180,
                               ),
                               child: Icon(
-                                state.playing
+                                state.playPauseShowsPause
                                     ? Icons.pause_rounded
                                     : Icons.play_arrow_rounded,
-                                key: ValueKey(state.playing),
+                                key: ValueKey(state.playPauseShowsPause),
                                 size: 27,
                               ),
                             ),
                           ),
                           IconButton(
                             tooltip:
-                                state.queue.isEmpty ? 'No next song' : 'Next',
+                                state.canGoNext ? 'Next' : 'No next song',
                             iconSize: 25,
                             color: Colors.white,
                             disabledColor: Colors.white24,
-                            onPressed: state.queue.isEmpty
+                            onPressed: !state.canGoNext
                                 ? null
                                 : () => state.playNext(),
                             icon: const Icon(Icons.skip_next_rounded),

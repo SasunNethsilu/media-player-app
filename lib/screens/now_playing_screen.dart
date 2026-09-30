@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -31,6 +30,7 @@ class NowPlayingScreen extends StatelessWidget {
     }
 
     return _TrackPlayer(
+      key: ValueKey(song.id),
       song: song,
       playerState: playerState,
       initialColorScheme: initialColorScheme,
@@ -44,6 +44,7 @@ class _TrackPlayer extends StatefulWidget {
   final ColorScheme? initialColorScheme;
 
   const _TrackPlayer({
+    super.key,
     required this.song,
     required this.playerState,
     this.initialColorScheme,
@@ -192,14 +193,18 @@ class _TrackPlayerState extends State<_TrackPlayer> {
       stream: player.durationStream,
       initialData: player.duration,
       builder: (context, durationSnapshot) {
-        final duration = durationSnapshot.data ?? Duration.zero;
+        final duration = widget.playerState.canSeek
+            ? durationSnapshot.data ?? Duration.zero
+            : Duration.zero;
         final totalMs = duration.inMilliseconds.toDouble();
 
         return StreamBuilder<Duration>(
           stream: player.positionStream,
           initialData: player.position,
           builder: (context, positionSnapshot) {
-            final position = positionSnapshot.data ?? Duration.zero;
+            final position = widget.playerState.canSeek
+                ? positionSnapshot.data ?? Duration.zero
+                : Duration.zero;
 
             final displayedMs = (_dragPosition ??
                     position.inMilliseconds.toDouble())
@@ -237,7 +242,7 @@ class _TrackPlayerState extends State<_TrackPlayer> {
                             final songId = widget.song.id;
 
                             try {
-                              await player.seek(
+                              await widget.playerState.seek(
                                 Duration(milliseconds: value.round()),
                               );
                             } catch (error) {
@@ -251,7 +256,7 @@ class _TrackPlayerState extends State<_TrackPlayer> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -285,53 +290,80 @@ class _TrackPlayerState extends State<_TrackPlayer> {
   Widget _buildControls() {
     final state = widget.playerState;
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        IconButton(
-          tooltip: 'Previous',
-          iconSize: 38,
-          color: Colors.white,
-          onPressed: () => state.playPrevious(),
-          icon: const Icon(Icons.skip_previous_rounded),
-        ),
-        SizedBox(
-          width: 78,
-          height: 78,
-          child: Material(
-            color: _scheme.primary,
-            shape: const CircleBorder(),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: state.togglePlayPause,
-              child: Center(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  child: Icon(
-                    state.playing
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
-                    key: ValueKey(state.playing),
-                    size: 44,
-                    color: _scheme.onPrimary,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 282;
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            IconButton(
+              tooltip: state.shuffleEnabled ? 'Shuffle on' : 'Shuffle off',
+              isSelected: state.shuffleEnabled,
+              color: state.shuffleEnabled ? _scheme.primary : Colors.white54,
+              onPressed: state.toggleShuffle,
+              icon: const Icon(Icons.shuffle_rounded),
+            ),
+            IconButton(
+              tooltip: 'Previous',
+              iconSize: compact ? 32 : 38,
+              color: Colors.white,
+              onPressed: () => state.playPrevious(),
+              icon: const Icon(Icons.skip_previous_rounded),
+            ),
+            SizedBox(
+              width: compact ? 64 : 78,
+              height: compact ? 64 : 78,
+              child: Material(
+                color: _scheme.primary,
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: state.togglePlayPause,
+                  child: Center(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 180),
+                      child: Icon(
+                        state.playPauseShowsPause
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        key: ValueKey(state.playPauseShowsPause),
+                        size: 44,
+                        color: _scheme.onPrimary,
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ),
-        IconButton(
-          tooltip: state.queue.isEmpty ? 'No next song' : 'Next',
-          iconSize: 38,
-          color: Colors.white,
-          disabledColor: Colors.white24,
-          onPressed: state.queue.isEmpty
-              ? null
-              : () => state.playNext(),
-          icon: const Icon(Icons.skip_next_rounded),
-        ),
-      ],
+            IconButton(
+              tooltip: state.canGoNext ? 'Next' : 'No next song',
+              iconSize: compact ? 32 : 38,
+              color: Colors.white,
+              disabledColor: Colors.white24,
+              onPressed: !state.canGoNext ? null : () => state.playNext(),
+              icon: const Icon(Icons.skip_next_rounded),
+            ),
+            IconButton(
+              tooltip: switch (state.repeatMode) {
+                PlaybackRepeatMode.off => 'Repeat off',
+                PlaybackRepeatMode.one => 'Repeat one',
+                PlaybackRepeatMode.all => 'Repeat all',
+              },
+              isSelected: state.repeatMode != PlaybackRepeatMode.off,
+              color: state.repeatMode == PlaybackRepeatMode.off
+                  ? Colors.white54
+                  : _scheme.primary,
+              onPressed: state.cycleRepeatMode,
+              icon: Icon(
+                state.repeatMode == PlaybackRepeatMode.one
+                    ? Icons.repeat_one_rounded
+                    : Icons.repeat_rounded,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -444,7 +476,7 @@ class _TrackPlayerState extends State<_TrackPlayer> {
 
                         final artworkSize = math.min(
                           contentWidth - 56,
-                          math.max(180.0, constraints.maxHeight * 0.49),
+                          math.max(256.0, constraints.maxHeight * 0.49),
                         );
 
                         return SingleChildScrollView(
@@ -454,7 +486,7 @@ class _TrackPlayerState extends State<_TrackPlayer> {
                             ),
                             child: Center(
                               child: SizedBox(
-                                width: contentWidth,
+                                width: artworkSize + 56,
                                 child: Padding(
                                   padding: const EdgeInsets.fromLTRB(
                                     28,
@@ -471,29 +503,48 @@ class _TrackPlayerState extends State<_TrackPlayer> {
                                         child: _buildArtwork(artworkSize),
                                       ),
                                       const SizedBox(height: 36),
-                                      Text(
-                                        widget.song.title,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 28,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: -0.7,
-                                          height: 1.15,
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                                        child: Text(
+                                          widget.song.title,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 28,
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: -0.7,
+                                            height: 1.15,
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 8),
-                                      Text(
-                                        widget.song.artist,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Colors.white60,
-                                          fontSize: 16,
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                                        child: Text(
+                                          widget.song.artist,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Colors.white60,
+                                            fontSize: 16,
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 22),
+                                      if (widget.playerState.playbackError != null)
+                                        Padding(
+                                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                                          child: Text(
+                                            widget.playerState.playbackError!,
+                                            style: TextStyle(color: _scheme.error),
+                                          ),
+                                        )
+                                      else if (widget.playerState.isLoadingTrack)
+                                        const Padding(
+                                          padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                                          child: Text('Loading track…'),
+                                        ),
                                       _buildProgress(),
                                       const SizedBox(height: 26),
                                       _buildControls(),
