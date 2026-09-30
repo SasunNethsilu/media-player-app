@@ -38,6 +38,7 @@ dependencies:
   just_audio: ^0.9.40
   provider: ^6.1.2
   just_audio_background: any
+  shared_preferences: ^2.5.5
 
 dependency_overrides:
   # Local fix: Android audio queries must not require photo permission.

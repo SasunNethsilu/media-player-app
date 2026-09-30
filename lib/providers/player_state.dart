@@ -3,6 +3,7 @@ import 'package:just_audio/just_audio.dart';
 import '../models/song.dart';
 import '../services/library_scanner.dart';
 import 'package:audio_service/audio_service.dart';
+import 'library_collections.dart';
 
 class PlayerState extends ChangeNotifier {
   final AudioPlayer _player = AudioPlayer();
@@ -13,8 +14,9 @@ class PlayerState extends ChangeNotifier {
   bool _isLoadingLibrary = false;
   String? _libraryError;
   bool _isDisposed = false;
+  final LibraryCollections collections;
 
-  PlayerState() {
+  PlayerState({required this.collections}) {
     _player.playerStateStream.listen((_) => notifyListeners());
 
     _player.processingStateStream.listen((state) {
@@ -81,6 +83,7 @@ class PlayerState extends ChangeNotifier {
       ),
     );
     _player.play();
+    collections.recordPlayed(song.id);
     notifyListeners();
   }
 

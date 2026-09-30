@@ -6,6 +6,7 @@ import 'providers/player_state.dart';
 import 'screens/library_screen.dart';
 import 'screens/search_screen.dart';
 import 'widgets/mini_player.dart';
+import 'providers/library_collections.dart';
 
 final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
@@ -18,9 +19,21 @@ Future<void> main() async {
     androidNotificationOngoing: true,
   );
 
+  final collections = LibraryCollections();
+  await collections.load();
+
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => PlayerState(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<LibraryCollections>(
+          create: (_) => collections,
+        ),
+        ChangeNotifierProvider<PlayerState>(
+          create: (context) => PlayerState(
+            collections: context.read<LibraryCollections>(),
+          ),
+        ),
+      ],
       child: const MyApp(),
     ),
   );
