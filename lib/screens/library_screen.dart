@@ -189,7 +189,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     ColorScheme scheme,
   ) {
     final showPause =
-      player.currentSong?.id == song.id && player.playing;
+      player.currentSong?.id == song.id && player.playPauseShowsPause;
 
     return SizedBox(
       width: 136,
@@ -637,7 +637,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   ) {
     final player = context.watch<PlayerState>();
     final isActivePlaylist = player.activePlaylistId == playlist.id;
-    final showPause = isActivePlaylist && player.playing;
+    final showPause = isActivePlaylist && player.playPauseShowsPause;
 
     return Material(
       key: ValueKey(playlist.id),

@@ -275,9 +275,7 @@ class _MiniPlayerCardState extends State<_MiniPlayerCard> {
                                 Text(
                                   state.playbackError != null
                                       ? 'Unable to play · Tap to view'
-                                      : state.isLoadingTrack
-                                          ? 'Loading track…'
-                                          : widget.song.artist,
+                                      : widget.song.artist,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(

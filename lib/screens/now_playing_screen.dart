@@ -61,6 +61,7 @@ class _TrackPlayerState extends State<_TrackPlayer> {
   double? _dragPosition;
   int? _artworkSongId;
   int _visualRequest = 0;
+  final Set<int> _prefetchedArtwork = {};
 
   @override
   void initState() {
@@ -79,6 +80,12 @@ class _TrackPlayerState extends State<_TrackPlayer> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _preloadUpcomingArtwork();
+  }
+
+  @override
   void didUpdateWidget(covariant _TrackPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
 
@@ -86,6 +93,30 @@ class _TrackPlayerState extends State<_TrackPlayer> {
       _dragPosition = null;
       _loadVisuals();
     }
+    _preloadUpcomingArtwork();
+  }
+
+  void _preloadUpcomingArtwork() {
+    for (final song in widget.playerState.queue.take(3)) {
+      if (_prefetchedArtwork.add(song.id)) {
+        _preloadArtwork(song.id);
+      }
+    }
+  }
+
+  Future<void> _preloadArtwork(int songId) async {
+    final visuals = await ArtworkPaletteService.shared.load(
+      songId,
+      priority: false,
+    );
+    if (!mounted || visuals.artwork == null) return;
+    await precacheImage(
+      MemoryImage(visuals.artwork!),
+      context,
+      onError: (Object error, StackTrace? stackTrace) {
+        _prefetchedArtwork.remove(songId);
+      },
+    );
   }
 
   Future<void> _loadVisuals() async {
@@ -162,6 +193,11 @@ class _TrackPlayerState extends State<_TrackPlayer> {
                   width: size,
                   height: size,
                   fit: BoxFit.cover,
+                  frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                    return frame != null || wasSynchronouslyLoaded
+                        ? child
+                        : _artworkPlaceholder(size);
+                  },
                   errorBuilder: (_, error, stackTrace) {
                     return _artworkPlaceholder(size);
                   },
@@ -539,11 +575,6 @@ class _TrackPlayerState extends State<_TrackPlayer> {
                                             widget.playerState.playbackError!,
                                             style: TextStyle(color: _scheme.error),
                                           ),
-                                        )
-                                      else if (widget.playerState.isLoadingTrack)
-                                        const Padding(
-                                          padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-                                          child: Text('Loading track…'),
                                         ),
                                       _buildProgress(),
                                       const SizedBox(height: 26),
