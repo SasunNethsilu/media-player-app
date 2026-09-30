@@ -9,6 +9,7 @@ class SongTile extends StatelessWidget {
   final bool isCurrent;
   final bool isPlaying;
   final Widget? trailing;
+  final Color? accentColor;
 
   const SongTile({
     super.key,
@@ -17,14 +18,17 @@ class SongTile extends StatelessWidget {
     this.isCurrent = false,
     this.isPlaying = false,
     this.trailing,
+    this.accentColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final accent = accentColor ?? Theme.of(context).colorScheme.primary;
+
     return Material(
       color: isCurrent
-          ? const Color(0xFF242731)
-          : Colors.transparent,
+        ? accent.withValues(alpha: 0.14)
+        : Colors.transparent,
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: ListTile(
@@ -67,7 +71,7 @@ class SongTile extends StatelessWidget {
                     isPlaying
                         ? Icons.equalizer_rounded
                         : Icons.pause_rounded,
-                    color: const Color(0xFFCCD8FA),
+                    color: accent,
                     size: 22,
                     semanticLabel: isPlaying ? 'Playing' : 'Paused',
                   )

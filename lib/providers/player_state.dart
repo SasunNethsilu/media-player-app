@@ -15,6 +15,7 @@ class PlayerState extends ChangeNotifier {
   String? _libraryError;
   bool _isDisposed = false;
   final LibraryCollections collections;
+  String? _activePlaylistId;
 
   PlayerState({required this.collections}) {
     _player.playerStateStream.listen((_) => notifyListeners());
@@ -34,6 +35,7 @@ class PlayerState extends ChangeNotifier {
   bool get isPlaying => _player.playing;
   bool get isLoadingLibrary => _isLoadingLibrary;
   String? get libraryError => _libraryError;
+  String? get activePlaylistId => _activePlaylistId;
 
   Future<void> loadLibrary() async {
     if (_isLoadingLibrary || _isDisposed) return;
@@ -87,11 +89,18 @@ class PlayerState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> playFromLibrary(Song song, List<Song> fromList) async {
-    final startIndex = fromList.indexWhere((item) => item.id == song.id);
+  Future<void> playFromLibrary(
+    Song song,
+    List<Song> fromList, {
+    String? playlistId,
+  }) async {
+    final startIndex = fromList.indexWhere(
+      (item) => item.id == song.id,
+    );
 
     if (startIndex == -1) return;
 
+    _activePlaylistId = playlistId;
     _queue = fromList.sublist(startIndex + 1);
     _history = fromList.sublist(0, startIndex);
 

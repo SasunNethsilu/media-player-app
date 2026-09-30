@@ -188,6 +188,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
     PlayerState player,
     ColorScheme scheme,
   ) {
+    final showPause =
+      player.currentSong?.id == song.id && player.playing;
+
     return SizedBox(
       width: 136,
       child: Material(
@@ -209,17 +212,49 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   Positioned(
                     right: 8,
                     bottom: 8,
-                    child: Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
+                    child: SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Material(
                         color: scheme.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.play_arrow_rounded,
-                        color: scheme.onPrimary,
-                        size: 23,
+                        shape: const CircleBorder(),
+                        clipBehavior: Clip.antiAlias,
+                        child: IconButton(
+                          tooltip: showPause
+                              ? 'Pause ${song.title}'
+                              : 'Play ${song.title}',
+                          icon: Icon(
+                            showPause
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+                          ),
+                          iconSize: 26,
+                          color: scheme.onPrimary,
+                          padding: EdgeInsets.zero,
+                          onPressed: () async {
+                            if (player.currentSong?.id == song.id) {
+                              player.togglePlayPause();
+                              return;
+                            }
+
+                            try {
+                              await player.playFromLibrary(
+                                song,
+                                List<Song>.of(recent),
+                              );
+                            } catch (error) {
+                              debugPrint('Recent song playback failed: $error');
+
+                              if (!mounted) return;
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Could not play this track.'),
+                                ),
+                              );
+                            }
+                          },
+                        ),
                       ),
                     ),
                   ),
@@ -399,6 +434,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     child: SongTile(
                       key: ValueKey(song.id),
                       song: song,
+                      accentColor: scheme.primary,
                       isCurrent: player.currentSong?.id == song.id,
                       isPlaying: player.playing,
                       onTap: () => player.playFromLibrary(song, songs),
@@ -414,156 +450,383 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  Widget _playlists(
+    Widget _playlists(
     PlayerState player,
     LibraryCollections collections,
     ColorScheme scheme,
   ) {
     final playlists = collections.playlists;
+    final songsById = {
+      for (final song in player.songs) song.id: song,
+    };
 
-    return ListView(
-      key: const PageStorageKey('local-playlists'),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                'Your Playlists',
-                style: TextStyle(
-                  fontSize: 21,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.4,
-                ),
-              ),
-            ),
-            IconButton.filledTonal(
-              tooltip: 'Create playlist',
-              onPressed: _createPlaylist,
-              icon: const Icon(Icons.add_rounded),
-            ),
-          ],
-        ),
-        const SizedBox(height: 18),
-        if (playlists.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(26),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(26),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: Column(
+    return CustomScrollView(
+      key: const PageStorageKey('local-playlists-grid'),
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+            child: Row(
               children: [
-                Icon(
-                  Icons.queue_music_rounded,
-                  size: 44,
-                  color: scheme.primary,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'No playlists yet',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Your Playlists',
+                        style: TextStyle(
+                          fontSize: 21,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+                      if (playlists.isNotEmpty) ...[
+                        const SizedBox(height: 5),
+                        Text(
+                          '${playlists.length} '
+                          '${playlists.length == 1 ? 'playlist' : 'playlists'}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.white54,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                const SizedBox(height: 20),
-                FilledButton.icon(
+                const SizedBox(width: 12),
+                IconButton.filled(
+                  tooltip: 'Create playlist',
                   onPressed: _createPlaylist,
-                  style: FilledButton.styleFrom(
+                  style: IconButton.styleFrom(
                     backgroundColor: scheme.primary,
                     foregroundColor: scheme.onPrimary,
+                    minimumSize: const Size(48, 48),
                   ),
                   icon: const Icon(Icons.add_rounded),
-                  label: const Text('Create playlist'),
                 ),
               ],
             ),
           ),
-        for (final playlist in playlists)
-          _playlistCard(playlist, player, collections, scheme),
+        ),
+        if (playlists.isEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              child: Container(
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(26),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Icon(
+                        Icons.library_music_rounded,
+                        size: 38,
+                        color: scheme.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Your next favourite mix',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Bring your favourite songs together.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white54,
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton.icon(
+                      onPressed: _createPlaylist,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: scheme.primary,
+                        foregroundColor: scheme.onPrimary,
+                        minimumSize: const Size(0, 48),
+                      ),
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Create playlist'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+            sliver: SliverLayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.crossAxisExtent;
+                final textScaler = MediaQuery.of(context).textScaler;
+
+                // Two columns on phones, more on wider screens.
+                // Very narrow layouts get one column.
+                final columns = width < 260
+                    ? 1
+                    : width >= 900
+                        ? 4
+                        : width >= 600
+                            ? 3
+                            : 2;
+
+                const spacing = 16.0;
+                final cardWidth =
+                    (width - spacing * (columns - 1)) / columns;
+
+                // Reserve two title lines and one count line.
+                final titleHeight = textScaler.scale(15) * 1.3 * 2;
+                final countHeight = textScaler.scale(13) * 1.4;
+                final cardHeight =
+                    cardWidth + 12 + titleHeight + 4 + countHeight + 14;
+
+                return SliverGrid(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    crossAxisSpacing: spacing,
+                    mainAxisSpacing: spacing,
+                    mainAxisExtent: cardHeight,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final playlist = playlists[index];
+                      final songs = <Song>[
+                        for (final id in playlist.songIds)
+                          if (songsById.containsKey(id)) songsById[id]!,
+                      ];
+
+                      return _playlistCard(
+                        playlist,
+                        songs,
+                        scheme,
+                        titleHeight,
+                      );
+                    },
+                    childCount: playlists.length,
+                  ),
+                );
+              },
+            ),
+          ),
       ],
     );
   }
 
   Widget _playlistCard(
     LocalPlaylist playlist,
-    PlayerState player,
-    LibraryCollections collections,
+    List<Song> songs,
     ColorScheme scheme,
+    double titleHeight,
   ) {
-    final songs = collections.songsFor(playlist.songIds, player.songs);
+    final player = context.watch<PlayerState>();
+    final isActivePlaylist = player.activePlaylistId == playlist.id;
+    final showPause = isActivePlaylist && player.playing;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: Colors.white.withValues(alpha: 0.06),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-          side: const BorderSide(color: Colors.white10),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => _openPlaylist(playlist.id),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                if (songs.isNotEmpty)
-                  SongArtwork(
-                    songId: songs.first.id,
-                    size: 64,
-                    borderRadius: 18,
-                  )
-                else
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: scheme.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Icon(
-                      Icons.queue_music_rounded,
-                      color: scheme.primary,
-                      size: 30,
-                    ),
-                  ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        playlist.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
+    return Material(
+      key: ValueKey(playlist.id),
+      color: Colors.white.withValues(alpha: 0.045),
+      borderRadius: BorderRadius.circular(22),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _openPlaylist(playlist.id),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 1,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _playlistCover(songs, scheme),
+                  if (songs.isNotEmpty)
+                    Positioned(
+                      right: 10,
+                      bottom: 10,
+                      child: Material(
+                        color: scheme.primary,
+                        shape: const CircleBorder(),
+                        elevation: 3,
+                        shadowColor: Colors.black38,
+                        clipBehavior: Clip.antiAlias,
+                        child: IconButton(
+                          tooltip: showPause
+                              ? 'Pause ${playlist.name}'
+                              : 'Play ${playlist.name}',
+                          icon: Icon(
+                            showPause
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+                          ),
+                          iconSize: 28,
+                          color: scheme.onPrimary,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 48,
+                            height: 48,
+                          ),
+                          onPressed: () async {
+                            if (player.activePlaylistId == playlist.id) {
+                              player.togglePlayPause();
+                              return;
+                            }
+
+                            final queue = List<Song>.of(songs);
+                            if (queue.isEmpty) return;
+
+                            try {
+                              await player.playFromLibrary(
+                                queue.first,
+                                queue,
+                                playlistId: playlist.id,
+                              );
+                            } catch (error) {
+                              debugPrint('Playlist playback failed: $error');
+
+                              if (!mounted) return;
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Could not play this track. Please try another.',
+                                  ),
+                                ),
+                              );
+                            }
+                          },
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '${songs.length} tracks',
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: Colors.white38,
-                ),
-              ],
+                    ),
+                ],
+              ),
             ),
-          ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    height: titleHeight,
+                    child: Text(
+                      playlist.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        height: 1.3,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${songs.length} '
+                    '${songs.length == 1 ? 'song' : 'songs'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.4,
+                      color: Colors.white54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  Widget _playlistCover(
+    List<Song> songs,
+    ColorScheme scheme,
+  ) {
+    final covers = <Song>[];
+    final seenAlbums = <String>{};
+
+    for (final song in songs) {
+      final album = song.album.trim().toLowerCase();
+      final unknownAlbum = album.isEmpty ||
+          album == '<unknown>' ||
+          album == 'unknown album';
+
+      final key = unknownAlbum ? 'song:${song.id}' : 'album:$album';
+
+      if (seenAlbums.add(key)) {
+        covers.add(song);
+      }
+
+      if (covers.length == 4) break;
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.maxWidth;
+
+        if (covers.isEmpty) {
+          return DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  scheme.primaryContainer,
+                  const Color(0xFF20232B),
+                ],
+              ),
+            ),
+            child: Center(
+              child: Icon(
+                Icons.library_music_rounded,
+                size: size * 0.32,
+                color: scheme.onPrimaryContainer,
+              ),
+            ),
+          );
+        }
+
+        if (covers.length == 1) {
+          return SongArtwork(
+            songId: covers.first.id,
+            size: size,
+            borderRadius: 0,
+          );
+        }
+
+        return Column(
+          children: List.generate(2, (row) {
+            return Row(
+              children: List.generate(2, (column) {
+                final index = (row * 2 + column) % covers.length;
+
+                return SongArtwork(
+                  songId: covers[index].id,
+                  size: size / 2,
+                  borderRadius: 0,
+                );
+              }),
+            );
+          }),
+        );
+      },
     );
   }
 
