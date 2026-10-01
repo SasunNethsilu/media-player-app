@@ -7,6 +7,7 @@ class FakeAudioPlayer implements AudioPlayer {
   final states = StreamController<PlayerState>.broadcast(sync: true);
   final processing = StreamController<ProcessingState>.broadcast(sync: true);
   final events = StreamController<PlaybackEvent>.broadcast(sync: true);
+  final positions = StreamController<Duration>.broadcast(sync: true);
   final loadedIds = <int>[];
   final audibleIds = <int>[];
   final seeks = <Duration?>[];
@@ -33,7 +34,7 @@ class FakeAudioPlayer implements AudioPlayer {
   @override
   Stream<Duration?> get durationStream => Stream.value(duration);
   @override
-  Stream<Duration> get positionStream => Stream.value(position);
+  Stream<Duration> get positionStream => positions.stream;
   @override
   Stream<PlayerState> get playerStateStream => states.stream;
   @override
@@ -50,7 +51,14 @@ class FakeAudioPlayer implements AudioPlayer {
 
   void complete() {
     position = duration!;
+    positions.add(position);
     emit(ProcessingState.completed);
+  }
+
+  void emitPosition(Duration value) {
+    if (disposed) return;
+    position = value;
+    positions.add(value);
   }
 
   @override
@@ -102,6 +110,7 @@ class FakeAudioPlayer implements AudioPlayer {
     if (seekGate != null) await seekGate!.future;
     if (disposed) return;
     position = value ?? Duration.zero;
+    positions.add(position);
     emit(ProcessingState.ready);
   }
 
@@ -116,6 +125,7 @@ class FakeAudioPlayer implements AudioPlayer {
     await states.close();
     await processing.close();
     await events.close();
+    await positions.close();
   }
 
   @override

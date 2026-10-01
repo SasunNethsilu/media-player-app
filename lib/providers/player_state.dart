@@ -8,6 +8,7 @@ import 'package:audio_service/audio_service.dart';
 import '../models/playback_sequence.dart';
 import '../models/song.dart';
 import '../services/library_scanner.dart';
+import '../services/playback_session_store.dart';
 import 'library_collections.dart';
 
 export '../models/playback_sequence.dart' show PlaybackRepeatMode;
@@ -15,6 +16,10 @@ export '../models/playback_sequence.dart' show PlaybackRepeatMode;
 class PlayerState extends ChangeNotifier {
   final AudioPlayer _player;
   final PlaybackSequence _sequence;
+  PlaybackSessionStore? sessionStore;
+  final Future<List<Song>> Function() _scanSongs;
+  final Duration positionPersistenceInterval;
+  final Duration sequencePersistenceDebounce;
   final List<StreamSubscription<dynamic>> _subscriptions = [];
   List<Song> _songs = [];
   bool _isLoadingLibrary = false;
@@ -32,18 +37,31 @@ class PlayerState extends ChangeNotifier {
   bool _exhausted = false;
   String? _playbackError;
   ProcessingState? _lastProcessingState;
+  Timer? _positionPersistenceTimer;
+  Timer? _sequencePersistenceTimer;
+  String? _sequenceRevision;
+  bool _sequenceDirty = false;
+  bool _removeLegacyOnNextSequenceSave = false;
+  bool _sessionRestoreAttempted = false;
+  bool _sessionReady = false;
 
   PlayerState({
     required this.collections,
     AudioPlayer? audioPlayer,
     Random? random,
+    this.sessionStore,
+    Future<List<Song>> Function()? scanSongs,
+    this.positionPersistenceInterval = const Duration(seconds: 5),
+    this.sequencePersistenceDebounce = const Duration(milliseconds: 350),
   }) : _player = audioPlayer ?? AudioPlayer(),
-       _sequence = PlaybackSequence(random: random) {
+       _sequence = PlaybackSequence(random: random),
+       _scanSongs = scanSongs ?? LibraryScanner().scanSongs {
     _subscriptions.add(
       _player.playerStateStream.listen((_) {
         if (!_isLoadingTrack) _notify();
       }),
     );
+    _subscriptions.add(_player.positionStream.listen(_positionChanged));
     _subscriptions.add(
       _player.playbackEventStream.listen(
         (_) {},
@@ -73,11 +91,15 @@ class PlayerState extends ChangeNotifier {
                 await _restart(request);
               } else {
                 await _loadCurrent(request);
+                _scheduleCheckpointSave();
               }
             } else {
               _exhausted = true;
               await _player.pause();
-              if (_isCurrent(request)) _notify();
+              if (_isCurrent(request)) {
+                _scheduleCheckpointSave();
+                _notify();
+              }
             }
           }, request),
         );
@@ -115,6 +137,90 @@ class PlayerState extends ChangeNotifier {
 
   void _notify() {
     if (!_isDisposed) notifyListeners();
+  }
+
+  SavedPlaybackSequence? _sequenceSnapshot(String revision) {
+    final snapshot = _sequence.snapshot;
+    if (snapshot == null) return null;
+    return SavedPlaybackSequence.capture(
+      revision: revision,
+      sequence: snapshot,
+    );
+  }
+
+  SavedPlaybackCheckpoint? _checkpointSnapshot(String? revision) {
+    if (revision == null || currentSong == null) return null;
+    return SavedPlaybackCheckpoint(
+      revision: revision,
+      currentIndex: _sequence.currentIndex,
+      positionMs: _player.position.inMilliseconds,
+      shuffleEnabled: shuffleEnabled,
+      repeatMode: repeatMode,
+      playlistId: _activePlaylistId,
+    );
+  }
+
+  void _positionChanged(Duration position) {
+    if (!_sessionReady || _isDisposed || currentSong == null) return;
+    _positionPersistenceTimer ??= Timer(positionPersistenceInterval, () {
+      _positionPersistenceTimer = null;
+      _persistCheckpoint();
+    });
+  }
+
+  void _persistCheckpoint() {
+    if (!_sessionReady || _isDisposed || _sequenceDirty) return;
+    final checkpoint = _checkpointSnapshot(_sequenceRevision);
+    if (checkpoint != null) {
+      unawaited(sessionStore?.saveCheckpoint(checkpoint));
+    }
+  }
+
+  void _scheduleCheckpointSave() {
+    if (!_sessionReady || _isDisposed) return;
+    _positionPersistenceTimer?.cancel();
+    _positionPersistenceTimer = null;
+    _persistCheckpoint();
+  }
+
+  void _scheduleSequenceSave({bool immediate = false}) {
+    if (!_sessionReady || _isDisposed || currentSong == null) return;
+    _sequenceDirty = true;
+    _positionPersistenceTimer?.cancel();
+    _positionPersistenceTimer = null;
+    _sequencePersistenceTimer?.cancel();
+    if (immediate) {
+      _persistSequence();
+    } else {
+      _sequencePersistenceTimer = Timer(
+        sequencePersistenceDebounce,
+        _persistSequence,
+      );
+    }
+  }
+
+  void _persistSequence() {
+    if (!_sessionReady || _isDisposed || currentSong == null) return;
+    _sequencePersistenceTimer = null;
+    final store = sessionStore;
+    if (store == null) return;
+    final previousRevision = _sequenceRevision;
+    final revision = store.createRevision();
+    final sequence = _sequenceSnapshot(revision);
+    final checkpoint = _checkpointSnapshot(revision);
+    if (sequence == null || checkpoint == null) return;
+    _sequenceDirty = false;
+    _sequenceRevision = revision;
+    final removeLegacy = _removeLegacyOnNextSequenceSave;
+    _removeLegacyOnNextSequenceSave = false;
+    unawaited(
+      store.saveSequenceAndCheckpoint(
+        sequence: sequence,
+        checkpoint: checkpoint,
+        previousRevision: previousRevision,
+        removeLegacy: removeLegacy,
+      ),
+    );
   }
 
   Future<void> _runPlayback(Future<void> Function() action, int request) {
@@ -190,11 +296,12 @@ class PlayerState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final songs = await LibraryScanner().scanSongs();
+      final songs = await _scanSongs();
 
       if (_isDisposed) return;
 
       _songs = songs;
+      await _restoreSessionAfterLibrary();
     } on LibraryPermissionDenied {
       if (_isDisposed) return;
 
@@ -213,6 +320,78 @@ class PlayerState extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  Future<void> _restoreSessionAfterLibrary() async {
+    if (_sessionRestoreAttempted || _isDisposed) return;
+    _sessionRestoreAttempted = true;
+    final store = sessionStore ??= PlaybackSessionStore();
+    final saved = await store.load();
+    if (_isDisposed) return;
+    final restored = saved?.reconcile(_songs);
+    if (restored == null || !_sequence.restore(restored.sequence)) {
+      _sessionReady = true;
+      return;
+    }
+
+    _activePlaylistId =
+        restored.playlistId != null &&
+            collections.playlistById(restored.playlistId!) != null
+        ? restored.playlistId
+        : null;
+    _sequenceRevision = restored.revision;
+    _removeLegacyOnNextSequenceSave = restored.requiresSequenceRewrite;
+    _selection++;
+    final request = ++_request;
+    var loaded = false;
+    try {
+      await _loadRestoredCurrent(request, restored.position);
+      loaded = _isCurrent(request) && canSeek;
+    } catch (error) {
+      await _failPlayback(error, request);
+    } finally {
+      if (!_isDisposed) {
+        _sessionReady = true;
+        if (loaded) {
+          if (restored.requiresSequenceRewrite) {
+            _scheduleSequenceSave(immediate: true);
+          } else {
+            _scheduleCheckpointSave();
+          }
+        }
+      }
+    }
+  }
+
+  Future<void> _loadRestoredCurrent(int request, Duration position) async {
+    if (!_isCurrent(request)) return;
+    final song = currentSong;
+    final entry = _sequence.currentKey;
+    if (song == null) return;
+    _isLoadingTrack = true;
+    _playbackError = null;
+    _loadedEntry = null;
+    _exhausted = false;
+    _sourceRevision++;
+    await _player.setAudioSource(
+      AudioSource.uri(
+        Uri.file(song.path),
+        tag: MediaItem(
+          id: song.id.toString(),
+          title: song.title,
+          artist: song.artist,
+          album: song.album,
+          duration: Duration(milliseconds: song.durationMs),
+        ),
+      ),
+      initialPosition: position,
+    );
+    if (!_isCurrent(request)) return;
+    if (_player.playing) await _player.pause();
+    if (!_isCurrent(request)) return;
+    _loadedEntry = entry;
+    _isLoadingTrack = false;
+    _notify();
   }
 
   void _resume(int request) {
@@ -235,6 +414,7 @@ class PlayerState extends ChangeNotifier {
     if (!_isCurrent(request)) return;
     _exhausted = false;
     if (resume) _resume(request);
+    _scheduleCheckpointSave();
     _notify();
   }
 
@@ -288,12 +468,14 @@ class PlayerState extends ChangeNotifier {
       if (!_sequence.start(song, snapshot, shuffle: shuffle)) return;
       _activePlaylistId = playlistId;
       await _loadCurrent(request);
+      _scheduleSequenceSave(immediate: true);
     }, newSelection: true);
   }
 
   Future<void> playNext() => _transport((request) async {
     if (_sequence.next()) {
       await _loadCurrent(request);
+      _scheduleCheckpointSave();
     } else if (_isLoadingTrack && _isCurrent(request)) {
       await _finishPendingLoad(request);
     }
@@ -303,10 +485,12 @@ class PlayerState extends ChangeNotifier {
     if (!identical(_loadedEntry, _sequence.currentKey) ||
         _loadedEntry == null) {
       await _loadCurrent(request);
+      _scheduleCheckpointSave();
     } else {
       _isLoadingTrack = false;
       _resume(request);
       collections.recordPlayed(currentSong!.id);
+      _scheduleCheckpointSave();
       _notify();
     }
   }
@@ -319,6 +503,7 @@ class PlayerState extends ChangeNotifier {
       return;
     }
     await _loadCurrent(request);
+    _scheduleCheckpointSave();
   });
 
   Future<void> seek(Duration position) {
@@ -333,6 +518,7 @@ class PlayerState extends ChangeNotifier {
       await _player.seek(position);
       if (!_isCurrent(request)) return;
       _exhausted = false;
+      _scheduleCheckpointSave();
       _notify();
     });
   }
@@ -340,12 +526,14 @@ class PlayerState extends ChangeNotifier {
   void toggleShuffle() {
     if (_isDisposed) return;
     _sequence.setShuffle(!shuffleEnabled);
+    _scheduleSequenceSave();
     _notify();
   }
 
   void setRepeatMode(PlaybackRepeatMode mode) {
     if (_isDisposed) return;
     _sequence.repeatMode = mode;
+    _scheduleCheckpointSave();
     _notify();
   }
 
@@ -359,24 +547,28 @@ class PlayerState extends ChangeNotifier {
   void reorderQueue(int oldIndex, int newIndex) {
     if (_isDisposed) return;
     _sequence.reorder(oldIndex, newIndex);
+    _scheduleSequenceSave();
     _notify();
   }
 
   void removeFromQueue(Song song) {
     if (_isDisposed) return;
     _sequence.remove(song);
+    _scheduleSequenceSave();
     _notify();
   }
 
   void clearUpcomingQueue() {
     if (_isDisposed) return;
     _sequence.clearUpcoming();
+    _scheduleSequenceSave();
     _notify();
   }
 
   void removeQueueEntry(Object key) {
     if (_isDisposed) return;
     _sequence.removeEntry(key);
+    _scheduleSequenceSave();
     _notify();
   }
 
@@ -400,7 +592,10 @@ class PlayerState extends ChangeNotifier {
       } else {
         _resume(request);
       }
-      if (_isCurrent(request)) _notify();
+      if (_isCurrent(request)) {
+        _scheduleCheckpointSave();
+        _notify();
+      }
     });
   }
 
@@ -414,6 +609,7 @@ class PlayerState extends ChangeNotifier {
     return _runPlayback(() async {
       if (selection != _selection) return;
       _sequence.enqueue(song, next: next);
+      _scheduleSequenceSave();
       _notify();
     }, request);
   }
@@ -424,6 +620,17 @@ class PlayerState extends ChangeNotifier {
   @override
   void dispose() {
     if (_isDisposed) return;
+    _positionPersistenceTimer?.cancel();
+    _positionPersistenceTimer = null;
+    _sequencePersistenceTimer?.cancel();
+    _sequencePersistenceTimer = null;
+    if (_sessionReady && currentSong != null) {
+      if (_sequenceDirty || _sequenceRevision == null) {
+        _persistSequence();
+      } else {
+        _persistCheckpoint();
+      }
+    }
     _isDisposed = true;
     _request++;
     for (final subscription in _subscriptions) {

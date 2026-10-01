@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'providers/player_state.dart';
+import 'services/playback_session_store.dart';
 import 'screens/library_screen.dart';
 import 'screens/search_screen.dart';
 import 'widgets/mini_player.dart';
@@ -19,7 +21,9 @@ Future<void> main() async {
     androidNotificationOngoing: true,
   );
 
-  final collections = LibraryCollections();
+  final preferences = SharedPreferencesAsync();
+  final collections = LibraryCollections(preferences: preferences);
+  final sessionStore = PlaybackSessionStore(preferences: preferences);
   await collections.load();
 
   runApp(
@@ -27,8 +31,10 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider<LibraryCollections>(create: (_) => collections),
         ChangeNotifierProvider<PlayerState>(
-          create: (context) =>
-              PlayerState(collections: context.read<LibraryCollections>()),
+          create: (context) => PlayerState(
+            collections: context.read<LibraryCollections>(),
+            sessionStore: sessionStore,
+          ),
         ),
       ],
       child: const MyApp(),

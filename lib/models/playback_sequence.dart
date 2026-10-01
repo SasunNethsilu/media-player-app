@@ -4,6 +4,23 @@ import 'song.dart';
 
 enum PlaybackRepeatMode { off, one, all }
 
+class PlaybackSequenceSnapshot {
+  final List<Song> songs;
+  final List<int> orders;
+  final int currentIndex;
+  final bool shuffleEnabled;
+  final PlaybackRepeatMode repeatMode;
+
+  PlaybackSequenceSnapshot({
+    required Iterable<Song> songs,
+    required Iterable<int> orders,
+    required this.currentIndex,
+    required this.shuffleEnabled,
+    required this.repeatMode,
+  }) : songs = List.unmodifiable(songs),
+       orders = List.unmodifiable(orders);
+}
+
 class PlaybackSequence {
   final Random _random;
   final List<_Entry> _entries = [];
@@ -14,6 +31,7 @@ class PlaybackSequence {
   PlaybackSequence({Random? random}) : _random = random ?? Random();
 
   Song? get current => _index < 0 ? null : _entries[_index].song;
+  int get currentIndex => _index;
   Object? get currentKey => _index < 0 ? null : _entries[_index];
   List<Song> get queue =>
       List.unmodifiable(_entries.skip(_index + 1).map((entry) => entry.song));
@@ -22,6 +40,36 @@ class PlaybackSequence {
   bool get canGoNext =>
       current != null &&
       (_index + 1 < _entries.length || repeatMode == PlaybackRepeatMode.all);
+
+  PlaybackSequenceSnapshot? get snapshot {
+    if (current == null) return null;
+    return PlaybackSequenceSnapshot(
+      songs: _entries.map((entry) => entry.song),
+      orders: _entries.map((entry) => entry.order),
+      currentIndex: _index,
+      shuffleEnabled: _shuffle,
+      repeatMode: repeatMode,
+    );
+  }
+
+  bool restore(PlaybackSequenceSnapshot snapshot) {
+    if (snapshot.songs.isEmpty ||
+        snapshot.songs.length != snapshot.orders.length ||
+        snapshot.currentIndex < 0 ||
+        snapshot.currentIndex >= snapshot.songs.length) {
+      return false;
+    }
+    _entries
+      ..clear()
+      ..addAll([
+        for (var i = 0; i < snapshot.songs.length; i++)
+          _Entry(snapshot.songs[i], snapshot.orders[i]),
+      ]);
+    _index = snapshot.currentIndex;
+    _shuffle = snapshot.shuffleEnabled;
+    repeatMode = snapshot.repeatMode;
+    return true;
+  }
 
   bool start(Song song, List<Song> songs, {bool? shuffle}) {
     final index = songs.indexWhere((item) => item.id == song.id);
