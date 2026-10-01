@@ -29,7 +29,6 @@ class NowPlayingScreen extends StatelessWidget {
     }
 
     return _TrackPlayer(
-      key: ValueKey(song.id),
       song: song,
       playerState: playerState,
       initialColorScheme: initialColorScheme,
@@ -43,7 +42,6 @@ class _TrackPlayer extends StatefulWidget {
   final ColorScheme? initialColorScheme;
 
   const _TrackPlayer({
-    super.key,
     required this.song,
     required this.playerState,
     this.initialColorScheme,
@@ -91,13 +89,23 @@ class _TrackPlayerState extends State<_TrackPlayer> {
 
     if (oldWidget.song.id != widget.song.id) {
       _dragPosition = null;
+      final cached = ArtworkPaletteService.shared.peek(widget.song.id);
+      _artwork = cached?.artwork;
+      _artworkSongId = cached == null ? null : widget.song.id;
+      if (cached != null) {
+        _scheme = cached.scheme;
+      }
       _loadVisuals();
     }
     _preloadUpcomingArtwork();
   }
 
   void _preloadUpcomingArtwork() {
-    for (final song in widget.playerState.queue.take(3)) {
+    final upcoming = widget.playerState.queue.take(3).toList(growable: false);
+    final upcomingIds = upcoming.map((song) => song.id).toSet();
+    _prefetchedArtwork.removeWhere((songId) => !upcomingIds.contains(songId));
+
+    for (final song in upcoming) {
       if (_prefetchedArtwork.add(song.id)) {
         _preloadArtwork(song.id);
       }

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:just_audio_background/just_audio_background.dart';
+import 'package:audio_service/audio_service.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'providers/player_state.dart';
 import 'services/playback_session_store.dart';
+import 'services/system_media_handler.dart';
 import 'screens/library_screen.dart';
 import 'screens/search_screen.dart';
 import 'widgets/mini_player.dart';
@@ -15,10 +16,16 @@ final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await JustAudioBackground.init(
-    androidNotificationChannelId: 'com.example.media_player.channel.audio',
-    androidNotificationChannelName: 'Audio playback',
-    androidNotificationOngoing: true,
+  final systemMediaHandler = await AudioService.init<SystemMediaHandler>(
+    builder: SystemMediaHandler.new,
+    config: const AudioServiceConfig(
+      androidNotificationChannelId: 'com.example.media_player.channel.audio',
+      androidNotificationChannelName: 'Audio playback',
+      androidNotificationOngoing: true,
+      androidNotificationIcon: 'drawable/ic_stat_music_note',
+      artDownscaleWidth: 800,
+      artDownscaleHeight: 800,
+    ),
   );
 
   final preferences = SharedPreferencesAsync();
@@ -34,6 +41,7 @@ Future<void> main() async {
           create: (context) => PlayerState(
             collections: context.read<LibraryCollections>(),
             sessionStore: sessionStore,
+            systemMediaHandler: systemMediaHandler,
           ),
         ),
       ],

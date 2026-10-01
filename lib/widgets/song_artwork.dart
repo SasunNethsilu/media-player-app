@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../services/artwork_palette_service.dart';
@@ -19,7 +21,7 @@ class SongArtwork extends StatefulWidget {
 }
 
 class _SongArtworkState extends State<SongArtwork> {
-  late Future<SongVisuals> _visualsFuture;
+  late Future<Uint8List?> _artworkFuture;
 
   @override
   void initState() {
@@ -37,7 +39,7 @@ class _SongArtworkState extends State<SongArtwork> {
   }
 
   void _load() {
-    _visualsFuture = ArtworkPaletteService.shared.load(
+    _artworkFuture = ArtworkPaletteService.shared.loadArtwork(
       widget.songId,
       priority: false,
     );
@@ -60,19 +62,19 @@ class _SongArtworkState extends State<SongArtwork> {
 
   @override
   Widget build(BuildContext context) {
-    final cached = ArtworkPaletteService.shared.peek(widget.songId);
+    final cached = ArtworkPaletteService.shared.peekArtwork(widget.songId);
 
     final decodeWidth = (widget.size * MediaQuery.of(context).devicePixelRatio)
         .round()
         .clamp(1, 800)
         .toInt();
 
-    return FutureBuilder<SongVisuals>(
+    return FutureBuilder<Uint8List?>(
       key: ValueKey(widget.songId),
-      future: _visualsFuture,
+      future: _artworkFuture,
       initialData: cached,
       builder: (context, snapshot) {
-        final bytes = snapshot.data?.artwork;
+        final bytes = snapshot.data;
 
         return ClipRRect(
           borderRadius: BorderRadius.circular(widget.borderRadius),

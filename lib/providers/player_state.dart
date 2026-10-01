@@ -9,6 +9,7 @@ import '../models/playback_sequence.dart';
 import '../models/song.dart';
 import '../services/library_scanner.dart';
 import '../services/playback_session_store.dart';
+import '../services/system_media_handler.dart';
 import 'library_collections.dart';
 
 export '../models/playback_sequence.dart' show PlaybackRepeatMode;
@@ -16,6 +17,7 @@ export '../models/playback_sequence.dart' show PlaybackRepeatMode;
 class PlayerState extends ChangeNotifier {
   final AudioPlayer _player;
   final PlaybackSequence _sequence;
+  final SystemMediaHandler? systemMediaHandler;
   PlaybackSessionStore? sessionStore;
   final Future<List<Song>> Function() _scanSongs;
   final Duration positionPersistenceInterval;
@@ -53,6 +55,7 @@ class PlayerState extends ChangeNotifier {
     Future<List<Song>> Function()? scanSongs,
     this.positionPersistenceInterval = const Duration(seconds: 5),
     this.sequencePersistenceDebounce = const Duration(milliseconds: 350),
+    this.systemMediaHandler,
   }) : _player = audioPlayer ?? AudioPlayer(),
        _sequence = PlaybackSequence(random: random),
        _scanSongs = scanSongs ?? LibraryScanner().scanSongs {
@@ -61,6 +64,17 @@ class PlayerState extends ChangeNotifier {
         if (!_isLoadingTrack) _notify();
       }),
     );
+    systemMediaHandler?.attach(
+      player: _player,
+      onPlay: _playFromSystem,
+      onPause: _pauseFromSystem,
+      onNext: playNext,
+      onPrevious: playPrevious,
+      onSeek: seek,
+      onSetShuffle: setShuffleEnabled,
+      onSetRepeat: setRepeatMode,
+    );
+    _syncSystemMedia();
     _subscriptions.add(_player.positionStream.listen(_positionChanged));
     _subscriptions.add(
       _player.playbackEventStream.listen(
@@ -136,7 +150,25 @@ class PlayerState extends ChangeNotifier {
   bool _isCurrent(int request) => !_isDisposed && request == _request;
 
   void _notify() {
-    if (!_isDisposed) notifyListeners();
+    if (!_isDisposed) {
+      _syncSystemMedia();
+      notifyListeners();
+    }
+  }
+
+  void _syncSystemMedia() {
+    final snapshot = _sequence.snapshot;
+    systemMediaHandler?.synchronize(
+      SystemMediaSnapshot(
+        sequence: snapshot?.songs ?? const [],
+        currentIndex: snapshot?.currentIndex ?? -1,
+        canGoNext: canGoNext,
+        shuffleEnabled: shuffleEnabled,
+        repeatMode: repeatMode,
+        isLoadingTrack: isLoadingTrack,
+        playbackError: playbackError,
+      ),
+    );
   }
 
   SavedPlaybackSequence? _sequenceSnapshot(String revision) {
@@ -524,8 +556,12 @@ class PlayerState extends ChangeNotifier {
   }
 
   void toggleShuffle() {
-    if (_isDisposed) return;
-    _sequence.setShuffle(!shuffleEnabled);
+    setShuffleEnabled(!shuffleEnabled);
+  }
+
+  void setShuffleEnabled(bool enabled) {
+    if (_isDisposed || shuffleEnabled == enabled) return;
+    _sequence.setShuffle(enabled);
     _scheduleSequenceSave();
     _notify();
   }
@@ -599,6 +635,18 @@ class PlayerState extends ChangeNotifier {
     });
   }
 
+  Future<void> _playFromSystem() {
+    if (_isDisposed || playing || isLoadingTrack) return Future<void>.value();
+    return togglePlayPause();
+  }
+
+  Future<void> _pauseFromSystem() {
+    if (_isDisposed || (!playing && !isLoadingTrack)) {
+      return Future<void>.value();
+    }
+    return togglePlayPause();
+  }
+
   Future<void> _enqueue(Song song, {required bool next}) {
     if (_isDisposed) return Future<void>.value();
     if (currentSong == null && _pendingTransports == 0) {
@@ -633,6 +681,7 @@ class PlayerState extends ChangeNotifier {
     }
     _isDisposed = true;
     _request++;
+    systemMediaHandler?.detach();
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }

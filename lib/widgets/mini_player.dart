@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../services/artwork_palette_service.dart';
@@ -94,6 +97,7 @@ class _MiniPlayerCardState extends State<_MiniPlayerCard> {
     if (cached != null) {
       _scheme = cached.scheme;
       _coloursReady = true;
+      _precacheNowPlayingArtwork(cached.artwork);
       return;
     }
 
@@ -101,9 +105,25 @@ class _MiniPlayerCardState extends State<_MiniPlayerCard> {
 
     if (!mounted || request != _colourRequest) return;
 
+    _precacheNowPlayingArtwork(visuals.artwork);
+
     setState(() {
       _scheme = visuals.scheme;
       _coloursReady = true;
+    });
+  }
+
+  void _precacheNowPlayingArtwork(Uint8List? artwork) {
+    if (artwork == null || !mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(
+        precacheImage(
+          MemoryImage(artwork),
+          context,
+          onError: (Object error, StackTrace? stackTrace) {},
+        ),
+      );
     });
   }
 

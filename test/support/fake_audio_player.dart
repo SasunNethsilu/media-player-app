@@ -28,6 +28,10 @@ class FakeAudioPlayer implements AudioPlayer {
   @override
   Duration position = Duration.zero;
   @override
+  Duration bufferedPosition = Duration.zero;
+  @override
+  double speed = 1.0;
+  @override
   ProcessingState processingState = ProcessingState.idle;
   @override
   Duration? get duration => const Duration(minutes: 3);
