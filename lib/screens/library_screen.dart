@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/song.dart';
+import '../models/library_catalog.dart';
 import '../providers/library_collections.dart';
 import '../providers/player_state.dart';
 import '../services/artwork_palette_service.dart';
@@ -9,6 +10,9 @@ import '../services/song_filter.dart';
 import '../widgets/song_artwork.dart';
 import '../widgets/song_tile.dart';
 import 'playlist_screen.dart';
+import 'library_browse_screen.dart';
+
+enum _SongListAction { sortTitle, sortArtist, toggleShortAudio }
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -20,6 +24,7 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> {
   int _section = 0;
   SortOption _sortOption = SortOption.title;
+  bool _hideShortAudio = false;
 
   int? _paletteSongId;
   Future<SongVisuals>? _paletteFuture;
@@ -41,9 +46,78 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   void _openPlaylist(String id) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => PlaylistScreen(playlistId: id)));
+  }
+
+  void _openBrowse(LibraryBrowseType type) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => PlaylistScreen(playlistId: id),
+        builder: (_) =>
+            LibraryBrowseScreen(type: type, hideShortAudio: _hideShortAudio),
+      ),
+    );
+  }
+
+  Widget _browseCard({
+    required String title,
+    required String detail,
+    required IconData icon,
+    required VoidCallback onTap,
+    required ColorScheme scheme,
+  }) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.055),
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Icon(icon, color: scheme.primary),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      detail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -53,15 +127,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     final result = await showDialog<String>(
       context: context,
+      animationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         title: const Text('New playlist'),
         content: TextField(
           autofocus: true,
           maxLength: 60,
           textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(
-            hintText: 'Playlist name',
-          ),
+          decoration: const InputDecoration(hintText: 'Playlist name'),
           onChanged: (value) => name = value,
           onSubmitted: (value) {
             if (value.trim().isNotEmpty) {
@@ -88,8 +164,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     if (!mounted || result == null) return;
 
-    final playlist =
-        context.read<LibraryCollections>().createPlaylist(result);
+    final playlist = context.read<LibraryCollections>().createPlaylist(result);
 
     _openPlaylist(playlist.id);
   }
@@ -105,9 +180,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     return Semantics(
       selected: selected,
       child: Material(
-        color: selected
-            ? scheme.primary
-            : Colors.white.withValues(alpha: 0.06),
+        color: selected ? scheme.primary : Colors.white.withValues(alpha: 0.06),
         shape: StadiumBorder(
           side: BorderSide(
             color: selected
@@ -119,10 +192,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         child: InkWell(
           onTap: () => setState(() => _section = index),
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 13,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -132,12 +202,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   color: selected ? scheme.onPrimary : Colors.white70,
                 ),
                 const SizedBox(width: 9),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: selected ? scheme.onPrimary : Colors.white70,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: selected ? scheme.onPrimary : Colors.white70,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -148,11 +220,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  Widget _status(
-    IconData icon,
-    String message, {
-    VoidCallback? retry,
-  }) {
+  Widget _status(IconData icon, String message, {VoidCallback? retry}) {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(28),
@@ -164,10 +232,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white60,
-                height: 1.5,
-              ),
+              style: const TextStyle(color: Colors.white60, height: 1.5),
             ),
             if (retry != null) ...[
               const SizedBox(height: 18),
@@ -189,7 +254,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     ColorScheme scheme,
   ) {
     final showPause =
-      player.currentSong?.id == song.id && player.playPauseShowsPause;
+        player.currentSong?.id == song.id && player.playPauseShowsPause;
 
     return SizedBox(
       width: 136,
@@ -204,11 +269,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             children: [
               Stack(
                 children: [
-                  SongArtwork(
-                    songId: song.id,
-                    size: 136,
-                    borderRadius: 22,
-                  ),
+                  SongArtwork(songId: song.id, size: 136, borderRadius: 22),
                   Positioned(
                     right: 8,
                     bottom: 8,
@@ -281,10 +342,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   song.artist,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
               ),
             ],
@@ -300,9 +358,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     ColorScheme scheme,
   ) {
     if (player.isLoadingLibrary) {
-      return const Center(
-        child: CircularProgressIndicator(strokeWidth: 2),
-      );
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
 
     if (player.libraryError != null) {
@@ -321,8 +377,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
       );
     }
 
-    final songs = filterAndSortSongs(player.songs, '', _sortOption);
+    final visibleSongs = applyShortAudioFilter(
+      player.songs,
+      enabled: _hideShortAudio,
+    );
+    final songs = filterAndSortSongs(visibleSongs, '', _sortOption);
     final recent = collections.recentSongs(player.songs);
+    final albumCount = groupAlbums(visibleSongs).length;
+    final artistCount = groupArtists(visibleSongs).length;
     final textScaler = MediaQuery.of(context).textScaler;
 
     return RefreshIndicator(
@@ -354,7 +416,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     ),
                   )
                 : SizedBox(
-                    height: 160 +
+                    height:
+                        160 +
                         textScaler.scale(14) * 1.5 +
                         textScaler.scale(12) * 1.5,
                     child: ListView.separated(
@@ -377,44 +440,141 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
+              child: const Text(
+                'Browse',
+                style: TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.4,
+                ),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final stack =
+                      constraints.maxWidth < 430 ||
+                      MediaQuery.textScalerOf(context).scale(14) > 20;
+                  final albums = _browseCard(
+                    title: 'Albums',
+                    detail:
+                        '$albumCount ${albumCount == 1 ? 'album' : 'albums'}',
+                    icon: Icons.album_rounded,
+                    onTap: () => _openBrowse(LibraryBrowseType.albums),
+                    scheme: scheme,
+                  );
+                  final artists = _browseCard(
+                    title: 'Artists',
+                    detail:
+                        '$artistCount ${artistCount == 1 ? 'artist' : 'artists'}',
+                    icon: Icons.people_alt_rounded,
+                    onTap: () => _openBrowse(LibraryBrowseType.artists),
+                    scheme: scheme,
+                  );
+
+                  if (stack) {
+                    return Column(
+                      children: [albums, const SizedBox(height: 12), artists],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      Expanded(child: albums),
+                      const SizedBox(width: 12),
+                      Expanded(child: artists),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
               child: Row(
                 children: [
-                  const Text(
-                    'All Songs',
-                    style: TextStyle(
-                      fontSize: 21,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.4,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const Flexible(
+                          child: Text(
+                            'All Songs',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 21,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.4,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          '${songs.length}',
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Text(
-                    '${songs.length}',
-                    style: const TextStyle(
-                      color: Colors.white38,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const Spacer(),
-                  PopupMenuButton<SortOption>(
-                    tooltip: 'Sort songs',
-                    initialValue: _sortOption,
-                    icon: const Icon(
-                      Icons.sort_rounded,
-                      color: Colors.white60,
-                    ),
-                    onSelected: (option) {
-                      setState(() => _sortOption = option);
+                  PopupMenuButton<_SongListAction>(
+                    tooltip: 'Sort and filter songs',
+                    icon: const Icon(Icons.sort_rounded, color: Colors.white60),
+                    onSelected: (action) {
+                      setState(() {
+                        switch (action) {
+                          case _SongListAction.sortTitle:
+                            _sortOption = SortOption.title;
+                          case _SongListAction.sortArtist:
+                            _sortOption = SortOption.artist;
+                          case _SongListAction.toggleShortAudio:
+                            _hideShortAudio = !_hideShortAudio;
+                        }
+                      });
                     },
-                    itemBuilder: (_) => const [
+                    itemBuilder: (_) => [
                       PopupMenuItem(
-                        value: SortOption.title,
-                        child: Text('Song title'),
+                        value: _SongListAction.sortTitle,
+                        child: Row(
+                          children: [
+                            Icon(
+                              _sortOption == SortOption.title
+                                  ? Icons.check_rounded
+                                  : Icons.sort_by_alpha_rounded,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            const Text('Song title'),
+                          ],
+                        ),
                       ),
                       PopupMenuItem(
-                        value: SortOption.artist,
-                        child: Text('Artist name'),
+                        value: _SongListAction.sortArtist,
+                        child: Row(
+                          children: [
+                            Icon(
+                              _sortOption == SortOption.artist
+                                  ? Icons.check_rounded
+                                  : Icons.person_outline_rounded,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            const Text('Artist name'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      CheckedPopupMenuItem(
+                        value: _SongListAction.toggleShortAudio,
+                        checked: _hideShortAudio,
+                        child: const Text('Hide tracks under 30 seconds'),
                       ),
                     ],
                   ),
@@ -422,27 +582,43 @@ class _LibraryScreenState extends State<LibraryScreen> {
               ),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 24),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final song = songs[index];
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: SongTile(
-                      key: ValueKey(song.id),
-                      song: song,
-                      accentColor: scheme.primary,
-                      isCurrent: player.currentSong?.id == song.id,
-                      isPlaying: player.playing,
-                      onTap: () => player.playFromLibrary(song, songs),
-                    ),
-                  );
-                },
-                childCount: songs.length,
+          if (_hideShortAudio)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: InputChip(
+                    label: const Text('Tracks under 30 seconds hidden'),
+                    avatar: const Icon(Icons.filter_alt_rounded, size: 18),
+                    onDeleted: () => setState(() => _hideShortAudio = false),
+                  ),
+                ),
               ),
+            ),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              8,
+              0,
+              8,
+              player.currentSong == null ? 24 : 120,
+            ),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final song = songs[index];
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: SongTile(
+                    key: ValueKey(song.id),
+                    song: song,
+                    accentColor: scheme.primary,
+                    isCurrent: player.currentSong?.id == song.id,
+                    isPlaying: player.playPauseShowsPause,
+                    onTap: () => player.playFromLibrary(song, songs),
+                  ),
+                );
+              }, childCount: songs.length),
             ),
           ),
         ],
@@ -450,15 +626,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-    Widget _playlists(
+  Widget _playlists(
     PlayerState player,
     LibraryCollections collections,
     ColorScheme scheme,
   ) {
     final playlists = collections.playlists;
-    final songsById = {
-      for (final song in player.songs) song.id: song,
-    };
+    final songsById = {for (final song in player.songs) song.id: song};
 
     return CustomScrollView(
       key: const PageStorageKey('local-playlists-grid'),
@@ -548,10 +722,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     const Text(
                       'Bring your favourite songs together.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white54,
-                        height: 1.5,
-                      ),
+                      style: TextStyle(color: Colors.white54, height: 1.5),
                     ),
                     const SizedBox(height: 24),
                     FilledButton.icon(
@@ -571,7 +742,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
           )
         else
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+            padding: EdgeInsets.fromLTRB(
+              20,
+              0,
+              20,
+              player.currentSong == null ? 28 : 124,
+            ),
             sliver: SliverLayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.crossAxisExtent;
@@ -582,14 +758,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 final columns = width < 260
                     ? 1
                     : width >= 900
-                        ? 4
-                        : width >= 600
-                            ? 3
-                            : 2;
+                    ? 4
+                    : width >= 600
+                    ? 3
+                    : 2;
 
                 const spacing = 16.0;
-                final cardWidth =
-                    (width - spacing * (columns - 1)) / columns;
+                final cardWidth = (width - spacing * (columns - 1)) / columns;
 
                 // Reserve two title lines and one count line.
                 final titleHeight = textScaler.scale(15) * 1.3 * 2;
@@ -604,23 +779,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     mainAxisSpacing: spacing,
                     mainAxisExtent: cardHeight,
                   ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final playlist = playlists[index];
-                      final songs = <Song>[
-                        for (final id in playlist.songIds)
-                          if (songsById.containsKey(id)) songsById[id]!,
-                      ];
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    final playlist = playlists[index];
+                    final songs = <Song>[
+                      for (final id in playlist.songIds)
+                        if (songsById.containsKey(id)) songsById[id]!,
+                    ];
 
-                      return _playlistCard(
-                        playlist,
-                        songs,
-                        scheme,
-                        titleHeight,
-                      );
-                    },
-                    childCount: playlists.length,
-                  ),
+                    return _playlistCard(playlist, songs, scheme, titleHeight);
+                  }, childCount: playlists.length),
                 );
               },
             ),
@@ -755,18 +922,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  Widget _playlistCover(
-    List<Song> songs,
-    ColorScheme scheme,
-  ) {
+  Widget _playlistCover(List<Song> songs, ColorScheme scheme) {
     final covers = <Song>[];
     final seenAlbums = <String>{};
 
     for (final song in songs) {
       final album = song.album.trim().toLowerCase();
-      final unknownAlbum = album.isEmpty ||
-          album == '<unknown>' ||
-          album == 'unknown album';
+      final unknownAlbum =
+          album.isEmpty || album == '<unknown>' || album == 'unknown album';
 
       final key = unknownAlbum ? 'song:${song.id}' : 'album:$album';
 
@@ -787,10 +950,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [
-                  scheme.primaryContainer,
-                  const Color(0xFF20232B),
-                ],
+                colors: [scheme.primaryContainer, const Color(0xFF20232B)],
               ),
             ),
             child: Center(
@@ -876,46 +1036,53 @@ class _LibraryScreenState extends State<LibraryScreen> {
               backgroundColor: Colors.transparent,
               title: const Text('Your Library'),
             ),
-            body: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
+            body: SafeArea(
+              top: false,
+              child: NestedScrollView(
+                headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                  SliverToBoxAdapter(
+                    child: Column(
                       children: [
-                        _pill(
-                          label: 'Library',
-                          icon: Icons.graphic_eq_rounded,
-                          index: 0,
-                          scheme: scheme,
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                _pill(
+                                  label: 'Library',
+                                  icon: Icons.graphic_eq_rounded,
+                                  index: 0,
+                                  scheme: scheme,
+                                ),
+                                _pill(
+                                  label: 'Playlists',
+                                  icon: Icons.queue_music_rounded,
+                                  index: 1,
+                                  scheme: scheme,
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                        _pill(
-                          label: 'Playlists',
-                          icon: Icons.queue_music_rounded,
-                          index: 1,
-                          scheme: scheme,
-                        ),
+                        if (collections.error != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                            child: Text(
+                              collections.error!,
+                              style: TextStyle(color: scheme.error),
+                            ),
+                          ),
                       ],
                     ),
                   ),
-                ),
-                if (collections.error != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                    child: Text(
-                      collections.error!,
-                      style: TextStyle(color: scheme.error),
-                    ),
-                  ),
-                Expanded(
-                  child: _section == 0
-                      ? _library(player, collections, scheme)
-                      : _playlists(player, collections, scheme),
-                ),
-              ],
+                ],
+                body: _section == 0
+                    ? _library(player, collections, scheme)
+                    : _playlists(player, collections, scheme),
+              ),
             ),
           ),
         );

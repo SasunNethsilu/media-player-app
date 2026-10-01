@@ -8,8 +8,9 @@ import 'package:media_player/widgets/song_tile.dart';
 import 'package:provider/provider.dart';
 
 import 'support/memory_preferences.dart';
+import 'support/fake_audio_player.dart';
 
-class PlaylistTestPlayer extends ChangeNotifier implements PlayerState {
+class PlaylistTestPlayer extends PlayerState {
   @override
   final List<Song> songs;
   @override
@@ -25,8 +26,12 @@ class PlaylistTestPlayer extends ChangeNotifier implements PlayerState {
   @override
   bool get shuffleEnabled => false;
 
-  PlaylistTestPlayer(this.songs, this.activePlaylistId)
-    : queue = songs.skip(1).toList();
+  PlaylistTestPlayer(
+    this.songs,
+    this.activePlaylistId,
+    LibraryCollections collections,
+  ) : queue = songs.skip(1).toList(),
+      super(collections: collections, audioPlayer: FakeAudioPlayer());
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -41,17 +46,21 @@ void main() {
     collections = LibraryCollections(preferences: MemoryPreferences());
     id = collections.createPlaylist('Original').id;
     collections.setPlaylistSongs(id, [1, 2, 3]);
-    player = PlaylistTestPlayer([
-      for (var i = 1; i <= 3; i++)
-        Song(
-          id: i,
-          title: 'Track $i',
-          artist: 'Artist',
-          album: 'Album',
-          path: '/music/$i.mp3',
-          durationMs: 180000,
-        ),
-    ], id);
+    player = PlaylistTestPlayer(
+      [
+        for (var i = 1; i <= 3; i++)
+          Song(
+            id: i,
+            title: 'Track $i',
+            artist: 'Artist',
+            album: 'Album',
+            path: '/music/$i.mp3',
+            durationMs: 180000,
+          ),
+      ],
+      id,
+      collections,
+    );
   });
 
   tearDown(() {
@@ -149,7 +158,8 @@ void main() {
       expect(player.currentSong.id, 1);
       expect(find.byTooltip('Options for Track 1'), findsOneWidget);
       final upwardStart = tester.getCenter(handles.last);
-      final upwardTarget = tester.getCenter(handles.first) - const Offset(0, 30);
+      final upwardTarget =
+          tester.getCenter(handles.first) - const Offset(0, 30);
       final upwardGesture = await tester.startGesture(upwardStart);
       await tester.pump();
       for (var step = 1; step <= 20; step++) {

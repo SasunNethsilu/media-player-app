@@ -25,13 +25,10 @@ Future<void> main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider<LibraryCollections>(
-          create: (_) => collections,
-        ),
+        ChangeNotifierProvider<LibraryCollections>(create: (_) => collections),
         ChangeNotifierProvider<PlayerState>(
-          create: (context) => PlayerState(
-            collections: context.read<LibraryCollections>(),
-          ),
+          create: (context) =>
+              PlayerState(collections: context.read<LibraryCollections>()),
         ),
       ],
       child: const MyApp(),
@@ -78,10 +75,7 @@ class MyApp extends StatelessWidget {
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: surface,
-          hintStyle: const TextStyle(
-            color: Colors.white38,
-            fontSize: 15,
-          ),
+          hintStyle: const TextStyle(color: Colors.white38, fontSize: 15),
           prefixIconColor: Colors.white54,
           suffixIconColor: Colors.white54,
           contentPadding: const EdgeInsets.symmetric(
@@ -133,6 +127,15 @@ class MyApp extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
         ),
+        iconButtonTheme: IconButtonThemeData(
+          style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+        ),
+        dialogTheme: DialogThemeData(
+          backgroundColor: surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(28),
+          ),
+        ),
         dividerColor: Colors.white10,
       ),
       home: const MainShell(),
@@ -150,39 +153,42 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
 
-  static const _screens = [
-    LibraryScreen(),
-    SearchScreen(),
-  ];
+  static const _screens = [LibraryScreen(), SearchScreen()];
 
   @override
   Widget build(BuildContext context) {
+    final showMiniPlayer = context.watch<PlayerState>().currentSong != null;
+    final systemBottom = MediaQuery.paddingOf(context).bottom;
+
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _screens,
-      ),
-      bottomNavigationBar: Column(
-        mainAxisSize: MainAxisSize.min,
+      extendBody: true,
+      body: Stack(
         children: [
-          const MiniPlayer(),
-          NavigationBar(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (index) {
-              setState(() => _selectedIndex = index);
-            },
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.library_music_outlined),
-                selectedIcon: Icon(Icons.library_music_rounded),
-                label: 'Library',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.search_rounded),
-                selectedIcon: Icon(Icons.manage_search_rounded),
-                label: 'Search',
-              ),
-            ],
+          IndexedStack(index: _selectedIndex, children: _screens),
+          if (showMiniPlayer)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 70 + systemBottom,
+              child: const MiniPlayer(),
+            ),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (index) {
+          setState(() => _selectedIndex = index);
+        },
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.library_music_outlined),
+            selectedIcon: Icon(Icons.library_music_rounded),
+            label: 'Library',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.search_rounded),
+            selectedIcon: Icon(Icons.manage_search_rounded),
+            label: 'Search',
           ),
         ],
       ),

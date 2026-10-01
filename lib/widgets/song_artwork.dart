@@ -62,11 +62,10 @@ class _SongArtworkState extends State<SongArtwork> {
   Widget build(BuildContext context) {
     final cached = ArtworkPaletteService.shared.peek(widget.songId);
 
-    final decodeWidth =
-        (widget.size * MediaQuery.of(context).devicePixelRatio)
-            .round()
-            .clamp(1, 800)
-            .toInt();
+    final decodeWidth = (widget.size * MediaQuery.of(context).devicePixelRatio)
+        .round()
+        .clamp(1, 800)
+        .toInt();
 
     return FutureBuilder<SongVisuals>(
       key: ValueKey(widget.songId),
@@ -78,7 +77,9 @@ class _SongArtworkState extends State<SongArtwork> {
         return ClipRRect(
           borderRadius: BorderRadius.circular(widget.borderRadius),
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 200),
             child: bytes == null
                 ? _placeholder()
                 : Image.memory(

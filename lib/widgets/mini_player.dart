@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+
 import '../services/artwork_palette_service.dart';
+
 import 'package:provider/provider.dart';
+
 import '../models/song.dart';
 import '../providers/player_state.dart';
 import '../screens/now_playing_screen.dart';
@@ -16,9 +19,28 @@ class MiniPlayer extends StatelessWidget {
 
     if (song == null) return const SizedBox.shrink();
 
-    return _MiniPlayerCard(
-      song: song,
-      playerState: playerState,
+    return _MiniPlayerCard(song: song, playerState: playerState);
+  }
+}
+
+class MiniPlayerOverlay extends StatelessWidget {
+  final Widget child;
+
+  const MiniPlayerOverlay({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        child,
+        const Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: SafeArea(top: false, child: MiniPlayer()),
+        ),
+      ],
     );
   }
 }
@@ -27,10 +49,7 @@ class _MiniPlayerCard extends StatefulWidget {
   final Song song;
   final PlayerState playerState;
 
-  const _MiniPlayerCard({
-    required this.song,
-    required this.playerState,
-  });
+  const _MiniPlayerCard({required this.song, required this.playerState});
 
   @override
   State<_MiniPlayerCard> createState() => _MiniPlayerCardState();
@@ -112,9 +131,7 @@ class _MiniPlayerCardState extends State<_MiniPlayerCard> {
     try {
       await Navigator.of(context).push<void>(
         PageRouteBuilder<void>(
-          transitionDuration: Duration(
-            milliseconds: reduceMotion ? 0 : 380,
-          ),
+          transitionDuration: Duration(milliseconds: reduceMotion ? 0 : 380),
           reverseTransitionDuration: Duration(
             milliseconds: reduceMotion ? 0 : 300,
           ),
@@ -123,25 +140,15 @@ class _MiniPlayerCardState extends State<_MiniPlayerCard> {
               initialColorScheme: _coloursReady ? _scheme : null,
             );
           },
-          transitionsBuilder: (
-            context,
-            animation,
-            secondaryAnimation,
-            child,
-          ) {
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
             final slide = animation.drive(
               Tween<Offset>(
                 begin: const Offset(0, 1),
                 end: Offset.zero,
-              ).chain(
-                CurveTween(curve: Curves.easeOutCubic),
-              ),
+              ).chain(CurveTween(curve: Curves.easeOutCubic)),
             );
 
-            return SlideTransition(
-              position: slide,
-              child: child,
-            );
+            return SlideTransition(position: slide, child: child);
           },
         ),
       );
@@ -226,9 +233,7 @@ class _MiniPlayerCardState extends State<_MiniPlayerCard> {
               end: Alignment.bottomRight,
               colors: [leftColour, rightColour],
             ),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.08),
-            ),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x33000000),
@@ -294,7 +299,9 @@ class _MiniPlayerCardState extends State<_MiniPlayerCard> {
                             icon: const Icon(Icons.skip_previous_rounded),
                           ),
                           IconButton(
-                            tooltip: state.playPauseShowsPause ? 'Pause' : 'Play',
+                            tooltip: state.playPauseShowsPause
+                                ? 'Pause'
+                                : 'Play',
                             style: IconButton.styleFrom(
                               backgroundColor: _scheme.primary,
                               foregroundColor: _scheme.onPrimary,
@@ -315,8 +322,7 @@ class _MiniPlayerCardState extends State<_MiniPlayerCard> {
                             ),
                           ),
                           IconButton(
-                            tooltip:
-                                state.canGoNext ? 'Next' : 'No next song',
+                            tooltip: state.canGoNext ? 'Next' : 'No next song',
                             iconSize: 25,
                             color: Colors.white,
                             disabledColor: Colors.white24,

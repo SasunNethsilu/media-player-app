@@ -6,6 +6,12 @@ class Song {
   final String path;
   final int durationMs;
   final String? albumArtPath;
+  final int? albumId;
+  final int? artistId;
+  final String? albumArtist;
+  final int? trackNumber;
+  final int? discNumber;
+  final int? year;
 
   Song({
     required this.id,
@@ -14,6 +20,12 @@ class Song {
     required this.album,
     required this.path,
     required this.durationMs,
-    this.albumArtPath
+    this.albumArtPath,
+    this.albumId,
+    this.artistId,
+    this.albumArtist,
+    this.trackNumber,
+    this.discNumber,
+    this.year,
   });
 }

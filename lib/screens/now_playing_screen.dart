@@ -2,7 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../services/artwork_palette_service.dart';
+
 import 'package:provider/provider.dart';
 
 import '../models/song.dart';
@@ -12,10 +14,7 @@ import 'queue_screen.dart';
 class NowPlayingScreen extends StatelessWidget {
   final ColorScheme? initialColorScheme;
 
-  const NowPlayingScreen({
-    super.key,
-    this.initialColorScheme,
-  });
+  const NowPlayingScreen({super.key, this.initialColorScheme});
 
   @override
   Widget build(BuildContext context) {
@@ -69,7 +68,8 @@ class _TrackPlayerState extends State<_TrackPlayer> {
 
     final cached = ArtworkPaletteService.shared.peek(widget.song.id);
 
-    _scheme = cached?.scheme ??
+    _scheme =
+        cached?.scheme ??
         widget.initialColorScheme ??
         ArtworkPaletteService.fallbackScheme;
 
@@ -158,11 +158,8 @@ class _TrackPlayerState extends State<_TrackPlayer> {
   }
 
   void _openQueue() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => const QueueScreen(),
-      ),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const QueueScreen()));
   }
 
   Widget _buildArtwork(double size) {
@@ -182,7 +179,9 @@ class _TrackPlayerState extends State<_TrackPlayer> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(26),
         child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 220),
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 220),
           switchInCurve: Curves.easeInOut,
           switchOutCurve: Curves.easeInOut,
           child: _artwork == null
@@ -193,11 +192,12 @@ class _TrackPlayerState extends State<_TrackPlayer> {
                   width: size,
                   height: size,
                   fit: BoxFit.cover,
-                  frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                    return frame != null || wasSynchronouslyLoaded
-                        ? child
-                        : _artworkPlaceholder(size);
-                  },
+                  frameBuilder:
+                      (context, child, frame, wasSynchronouslyLoaded) {
+                        return frame != null || wasSynchronouslyLoaded
+                            ? child
+                            : _artworkPlaceholder(size);
+                      },
                   errorBuilder: (_, error, stackTrace) {
                     return _artworkPlaceholder(size);
                   },
@@ -242,10 +242,10 @@ class _TrackPlayerState extends State<_TrackPlayer> {
                 ? positionSnapshot.data ?? Duration.zero
                 : Duration.zero;
 
-            final displayedMs = (_dragPosition ??
-                    position.inMilliseconds.toDouble())
-                .clamp(0.0, totalMs)
-                .toDouble();
+            final displayedMs =
+                (_dragPosition ?? position.inMilliseconds.toDouble())
+                    .clamp(0.0, totalMs)
+                    .toDouble();
 
             return Column(
               children: [
@@ -329,36 +329,40 @@ class _TrackPlayerState extends State<_TrackPlayer> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 282;
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            IconButton(
-              tooltip: state.shuffleEnabled ? 'Shuffle on' : 'Shuffle off',
-              isSelected: state.shuffleEnabled,
-              color: state.shuffleEnabled ? _scheme.primary : Colors.white54,
-              onPressed: state.toggleShuffle,
-              icon: const Icon(Icons.shuffle_rounded),
-            ),
-            IconButton(
-              tooltip: 'Previous',
-              iconSize: compact ? 32 : 38,
-              color: Colors.white,
-              onPressed: () => state.playPrevious(),
-              icon: const Icon(Icons.skip_previous_rounded),
-            ),
-            SizedBox(
-              width: compact ? 64 : 78,
-              height: compact ? 64 : 78,
-              child: Material(
-                color: _scheme.primary,
-                shape: const CircleBorder(),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: state.togglePlayPause,
+        final controls = <Widget>[
+          IconButton(
+            tooltip: state.shuffleEnabled ? 'Shuffle on' : 'Shuffle off',
+            isSelected: state.shuffleEnabled,
+            color: state.shuffleEnabled ? _scheme.primary : Colors.white54,
+            onPressed: state.toggleShuffle,
+            icon: const Icon(Icons.shuffle_rounded),
+          ),
+          IconButton(
+            tooltip: 'Previous',
+            style: IconButton.styleFrom(animationDuration: Duration.zero),
+            iconSize: compact ? 32 : 38,
+            color: Colors.white,
+            onPressed: () => state.playPrevious(),
+            icon: const Icon(Icons.skip_previous_rounded),
+          ),
+          SizedBox(
+            width: compact ? 64 : 78,
+            height: compact ? 64 : 78,
+            child: Material(
+              color: _scheme.primary,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: state.togglePlayPause,
+                child: Semantics(
+                  button: true,
+                  label: state.playPauseShowsPause ? 'Pause' : 'Play',
                   child: Center(
                     child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 180),
                       child: Icon(
                         state.playPauseShowsPause
                             ? Icons.pause_rounded
@@ -372,32 +376,52 @@ class _TrackPlayerState extends State<_TrackPlayer> {
                 ),
               ),
             ),
-            IconButton(
-              tooltip: state.canGoNext ? 'Next' : 'No next song',
-              iconSize: compact ? 32 : 38,
-              color: Colors.white,
-              disabledColor: Colors.white24,
-              onPressed: !state.canGoNext ? null : () => state.playNext(),
-              icon: const Icon(Icons.skip_next_rounded),
+          ),
+          IconButton(
+            tooltip: state.canGoNext ? 'Next' : 'No next song',
+            style: IconButton.styleFrom(animationDuration: Duration.zero),
+            iconSize: compact ? 32 : 38,
+            color: Colors.white,
+            disabledColor: Colors.white24,
+            onPressed: !state.canGoNext ? null : () => state.playNext(),
+            icon: const Icon(Icons.skip_next_rounded),
+          ),
+          IconButton(
+            tooltip: switch (state.repeatMode) {
+              PlaybackRepeatMode.off => 'Repeat off',
+              PlaybackRepeatMode.one => 'Repeat one',
+              PlaybackRepeatMode.all => 'Repeat all',
+            },
+            isSelected: state.repeatMode != PlaybackRepeatMode.off,
+            color: state.repeatMode == PlaybackRepeatMode.off
+                ? Colors.white54
+                : _scheme.primary,
+            onPressed: state.cycleRepeatMode,
+            icon: Icon(
+              state.repeatMode == PlaybackRepeatMode.one
+                  ? Icons.repeat_one_rounded
+                  : Icons.repeat_rounded,
             ),
-            IconButton(
-              tooltip: switch (state.repeatMode) {
-                PlaybackRepeatMode.off => 'Repeat off',
-                PlaybackRepeatMode.one => 'Repeat one',
-                PlaybackRepeatMode.all => 'Repeat all',
-              },
-              isSelected: state.repeatMode != PlaybackRepeatMode.off,
-              color: state.repeatMode == PlaybackRepeatMode.off
-                  ? Colors.white54
-                  : _scheme.primary,
-              onPressed: state.cycleRepeatMode,
-              icon: Icon(
-                state.repeatMode == PlaybackRepeatMode.one
-                    ? Icons.repeat_one_rounded
-                    : Icons.repeat_rounded,
+          ),
+        ];
+        if (constraints.maxWidth < 256) {
+          return Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: controls.sublist(1, 4),
               ),
-            ),
-          ],
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [controls.first, controls.last],
+              ),
+            ],
+          );
+        }
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: controls,
         );
       },
     );
@@ -434,24 +458,24 @@ class _TrackPlayerState extends State<_TrackPlayer> {
           fit: StackFit.expand,
           children: [
             AnimatedContainer(
-              duration: const Duration(milliseconds: 800),
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 800),
               curve: Curves.easeInOutCubic,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    topColour,
-                    middleColour,
-                    bottomColour,
-                  ],
+                  colors: [topColour, middleColour, bottomColour],
                   stops: const [0, 0.52, 1],
                 ),
               ),
             ),
 
             AnimatedContainer(
-              duration: const Duration(milliseconds: 800),
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 800),
               curve: Curves.easeInOutCubic,
               decoration: BoxDecoration(
                 gradient: RadialGradient(
@@ -535,12 +559,12 @@ class _TrackPlayerState extends State<_TrackPlayer> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
                                     children: [
-                                      Center(
-                                        child: _buildArtwork(artworkSize),
-                                      ),
+                                      Center(child: _buildArtwork(artworkSize)),
                                       const SizedBox(height: 36),
                                       Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                        ),
                                         child: Text(
                                           widget.song.title,
                                           maxLines: 2,
@@ -556,7 +580,9 @@ class _TrackPlayerState extends State<_TrackPlayer> {
                                       ),
                                       const SizedBox(height: 8),
                                       Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                        ),
                                         child: Text(
                                           widget.song.artist,
                                           maxLines: 1,
@@ -568,12 +594,20 @@ class _TrackPlayerState extends State<_TrackPlayer> {
                                         ),
                                       ),
                                       const SizedBox(height: 22),
-                                      if (widget.playerState.playbackError != null)
+                                      if (widget.playerState.playbackError !=
+                                          null)
                                         Padding(
-                                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                                          padding: const EdgeInsets.fromLTRB(
+                                            16,
+                                            0,
+                                            16,
+                                            12,
+                                          ),
                                           child: Text(
                                             widget.playerState.playbackError!,
-                                            style: TextStyle(color: _scheme.error),
+                                            style: TextStyle(
+                                              color: _scheme.error,
+                                            ),
                                           ),
                                         ),
                                       _buildProgress(),
@@ -586,8 +620,7 @@ class _TrackPlayerState extends State<_TrackPlayer> {
                                           style: TextButton.styleFrom(
                                             foregroundColor: Colors.white70,
                                             backgroundColor: Colors.white10,
-                                            padding:
-                                                const EdgeInsets.symmetric(
+                                            padding: const EdgeInsets.symmetric(
                                               horizontal: 20,
                                               vertical: 10,
                                             ),
@@ -601,7 +634,7 @@ class _TrackPlayerState extends State<_TrackPlayer> {
                                             widget.playerState.queue.isEmpty
                                                 ? 'View queue'
                                                 : 'Up next · '
-                                                    '${widget.playerState.queue.length}',
+                                                      '${widget.playerState.queue.length}',
                                           ),
                                         ),
                                       ),
