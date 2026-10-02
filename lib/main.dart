@@ -23,8 +23,8 @@ Future<void> main() async {
       androidNotificationChannelName: 'Audio playback',
       androidNotificationOngoing: true,
       androidNotificationIcon: 'drawable/ic_stat_music_note',
-      artDownscaleWidth: 800,
-      artDownscaleHeight: 800,
+      artDownscaleWidth: 192,
+      artDownscaleHeight: 192,
     ),
   );
 

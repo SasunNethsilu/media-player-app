@@ -37,6 +37,7 @@ class ArtworkPaletteService {
   final _pendingArtwork = <_ArtworkJob>[];
   final _pendingPalettes = <_PaletteJob>[];
   final _systemArtworkFiles = <int, File>{};
+  final _systemArtworkInFlight = <int, Future<Uri?>>{};
 
   int _activeArtwork = 0;
   int _activePalettes = 0;
@@ -120,8 +121,35 @@ class ArtworkPaletteService {
     unawaited(load(songId, priority: false));
   }
 
-  Future<Uri?> loadSystemArtworkUri(int songId) async {
-    final artwork = await loadArtwork(songId);
+  Uri? peekSystemArtworkUri(int songId) {
+    final file = _systemArtworkFiles.remove(songId);
+    if (file == null) return null;
+    _systemArtworkFiles[songId] = file;
+    return file.uri;
+  }
+
+  Future<Uri?> preloadSystemArtworkUri(int songId) =>
+      loadSystemArtworkUri(songId, priority: false);
+
+  Future<Uri?> loadSystemArtworkUri(int songId, {bool priority = true}) {
+    final cached = peekSystemArtworkUri(songId);
+    if (cached != null) return Future<Uri?>.value(cached);
+    final existing = _systemArtworkInFlight[songId];
+    if (existing != null) {
+      if (priority) loadArtwork(songId);
+      return existing;
+    }
+    final request = _createSystemArtworkUri(songId, priority: priority);
+    _systemArtworkInFlight[songId] = request;
+    request.whenComplete(() => _systemArtworkInFlight.remove(songId));
+    return request;
+  }
+
+  Future<Uri?> _createSystemArtworkUri(
+    int songId, {
+    required bool priority,
+  }) async {
+    final artwork = await loadArtwork(songId, priority: priority);
     if (artwork == null) return null;
     try {
       final directory = Directory(

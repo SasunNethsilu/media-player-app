@@ -87,6 +87,7 @@ void main() {
     };
     final handler = SystemMediaHandler(
       artworkUriLoader: (id) => artwork[id]!.future,
+      artworkUriPrefetcher: (_) async => null,
     );
     addTearDown(handler.detach);
 
@@ -122,5 +123,55 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(handler.mediaItem.value?.title, 'Track 2');
     expect(handler.mediaItem.value?.artUri, Uri.file('/tmp/current.img'));
+  });
+
+  test('prepared next artwork is published with the new title', () async {
+    final cached = <int, Uri>{};
+    final requested = <int>[];
+    final handler = SystemMediaHandler(
+      artworkUriLoader: (id) async => cached[id],
+      artworkUriPrefetcher: (id) async {
+        requested.add(id);
+        cached[id] = Uri.file('/tmp/$id.img');
+        return cached[id];
+      },
+      artworkUriPeek: (id) => cached[id],
+    );
+    addTearDown(handler.detach);
+    final published = <MediaItem?>[];
+    final subscription = handler.mediaItem.listen(published.add);
+    addTearDown(subscription.cancel);
+
+    handler.synchronize(
+      SystemMediaSnapshot(
+        sequence: songs,
+        currentIndex: 0,
+        canGoNext: true,
+        shuffleEnabled: false,
+        repeatMode: PlaybackRepeatMode.off,
+        isLoadingTrack: false,
+        playbackError: null,
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(requested, [2, 3]);
+
+    final before = published.length;
+    handler.synchronize(
+      SystemMediaSnapshot(
+        sequence: songs,
+        currentIndex: 1,
+        canGoNext: true,
+        shuffleEnabled: false,
+        repeatMode: PlaybackRepeatMode.off,
+        isLoadingTrack: false,
+        playbackError: null,
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(published[before]?.title, 'Track 2');
+    expect(published[before]?.artUri, Uri.file('/tmp/2.img'));
+    expect(published.skip(before).length, 1);
   });
 }

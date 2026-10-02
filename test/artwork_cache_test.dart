@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -51,5 +52,18 @@ void main() {
 
     expect(artworkQueries, 1);
     expect(ArtworkPaletteService.shared.peek(songId), isNotNull);
+
+    final service = ArtworkPaletteService.shared;
+    final prepared = await tester.runAsync(
+      () => service.preloadSystemArtworkUri(songId),
+    );
+    expect(prepared, isNotNull);
+    final written = await tester.runAsync(
+      () => File.fromUri(prepared!).readAsBytes(),
+    );
+    expect(written, bytes);
+    expect(service.peekSystemArtworkUri(songId), prepared);
+    expect(await service.loadSystemArtworkUri(songId), prepared);
+    expect(artworkQueries, 1);
   });
 }

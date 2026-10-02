@@ -33,6 +33,8 @@ class SystemMediaSnapshot {
 
 class SystemMediaHandler extends BaseAudioHandler {
   final Future<Uri?> Function(int songId) _artworkUriLoader;
+  final Future<Uri?> Function(int songId) _artworkUriPrefetcher;
+  final Uri? Function(int songId) _artworkUriPeek;
   final List<StreamSubscription<dynamic>> _subscriptions = [];
 
   AudioPlayer? _player;
@@ -49,9 +51,19 @@ class SystemMediaHandler extends BaseAudioHandler {
   int _artworkRequest = 0;
   bool _notificationStopped = false;
 
-  SystemMediaHandler({Future<Uri?> Function(int songId)? artworkUriLoader})
-    : _artworkUriLoader =
-          artworkUriLoader ?? ArtworkPaletteService.shared.loadSystemArtworkUri;
+  SystemMediaHandler({
+    Future<Uri?> Function(int songId)? artworkUriLoader,
+    Future<Uri?> Function(int songId)? artworkUriPrefetcher,
+    Uri? Function(int songId)? artworkUriPeek,
+  }) : _artworkUriLoader =
+           artworkUriLoader ??
+           ArtworkPaletteService.shared.loadSystemArtworkUri,
+       _artworkUriPrefetcher =
+           artworkUriPrefetcher ??
+           artworkUriLoader ??
+           ArtworkPaletteService.shared.preloadSystemArtworkUri,
+       _artworkUriPeek =
+           artworkUriPeek ?? ArtworkPaletteService.shared.peekSystemArtworkUri;
 
   void attach({
     required AudioPlayer player,
@@ -79,6 +91,8 @@ class SystemMediaHandler extends BaseAudioHandler {
 
   void synchronize(SystemMediaSnapshot snapshot) {
     final previousKey = _mediaKey;
+    final previousQueueKeys = _queueKeys;
+    final previousRepeatMode = _snapshot?.repeatMode;
     _snapshot = snapshot;
     final song = snapshot.currentSong;
     final nextKey = song == null ? null : _songKey(song);
@@ -88,6 +102,11 @@ class SystemMediaHandler extends BaseAudioHandler {
       _updateMediaItem(song);
     }
     _updateQueue(snapshot);
+    if (nextKey != previousKey ||
+        !identical(previousQueueKeys, _queueKeys) ||
+        previousRepeatMode != snapshot.repeatMode) {
+      _prefetchNearby(snapshot);
+    }
     _broadcast();
   }
 
@@ -168,8 +187,10 @@ class SystemMediaHandler extends BaseAudioHandler {
       mediaItem.add(null);
       return;
     }
-    final item = _mediaItem(song);
+    final cachedArtUri = _artworkUriPeek(song.id);
+    final item = _mediaItem(song).copyWith(artUri: cachedArtUri);
     mediaItem.add(item);
+    if (cachedArtUri != null) return;
     unawaited(
       _artworkUriLoader(song.id).then<void>((artUri) {
         if (request == _artworkRequest &&
@@ -179,6 +200,29 @@ class SystemMediaHandler extends BaseAudioHandler {
         }
       }, onError: (_, _) {}),
     );
+  }
+
+  void _prefetchNearby(SystemMediaSnapshot snapshot) {
+    final songs = snapshot.sequence;
+    if (songs.length < 2 || snapshot.currentSong == null) return;
+    final indices = <int>[
+      snapshot.currentIndex + 1,
+      snapshot.currentIndex + 2,
+      snapshot.currentIndex - 1,
+    ];
+    final seen = <int>{snapshot.currentSong!.id};
+    for (final rawIndex in indices) {
+      var index = rawIndex;
+      if (index < 0 || index >= songs.length) {
+        if (snapshot.repeatMode != PlaybackRepeatMode.all) continue;
+        index = (index + songs.length) % songs.length;
+      }
+      final songId = songs[index].id;
+      if (!seen.add(songId) || _artworkUriPeek(songId) != null) continue;
+      unawaited(
+        _artworkUriPrefetcher(songId).then<void>((_) {}, onError: (_, _) {}),
+      );
+    }
   }
 
   void _updateQueue(SystemMediaSnapshot snapshot) {
