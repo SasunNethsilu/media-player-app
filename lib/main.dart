@@ -4,10 +4,11 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'providers/player_state.dart';
+import 'providers/app_settings.dart';
 import 'services/playback_session_store.dart';
 import 'services/system_media_handler.dart';
 import 'screens/library_screen.dart';
-import 'screens/search_screen.dart';
+import 'screens/songs_screen.dart';
 import 'widgets/mini_player.dart';
 import 'providers/library_collections.dart';
 
@@ -19,7 +20,7 @@ Future<void> main() async {
   final systemMediaHandler = await AudioService.init<SystemMediaHandler>(
     builder: SystemMediaHandler.new,
     config: const AudioServiceConfig(
-      androidNotificationChannelId: 'com.example.media_player.channel.audio',
+      androidNotificationChannelId: 'com.sasunnethsilu.musicplayer.channel.audio',
       androidNotificationChannelName: 'Audio playback',
       androidNotificationOngoing: true,
       androidNotificationIcon: 'drawable/ic_stat_music_note',
@@ -30,16 +31,19 @@ Future<void> main() async {
 
   final preferences = SharedPreferencesAsync();
   final collections = LibraryCollections(preferences: preferences);
+  final settings = AppSettings(preferences: preferences);
   final sessionStore = PlaybackSessionStore(preferences: preferences);
-  await collections.load();
+  await Future.wait([collections.load(), settings.load()]);
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<LibraryCollections>(create: (_) => collections),
+        ChangeNotifierProvider<AppSettings>(create: (_) => settings),
         ChangeNotifierProvider<PlayerState>(
           create: (context) => PlayerState(
             collections: context.read<LibraryCollections>(),
+            appSettings: context.read<AppSettings>(),
             sessionStore: sessionStore,
             systemMediaHandler: systemMediaHandler,
           ),
@@ -59,6 +63,7 @@ class MyApp extends StatelessWidget {
     const surface = Color(0xFF1B1D24);
 
     return MaterialApp(
+      title: 'Music Player',
       debugShowCheckedModeBanner: false,
       navigatorObservers: [routeObserver],
       theme: ThemeData(
@@ -166,8 +171,12 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
+  final _songsKey = GlobalKey<SongsScreenState>();
 
-  static const _screens = [LibraryScreen(), SearchScreen()];
+  void _openAllSongs() {
+    _songsKey.currentState?.clearSearch();
+    setState(() => _selectedIndex = 1);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -178,7 +187,13 @@ class _MainShellState extends State<MainShell> {
       extendBody: true,
       body: Stack(
         children: [
-          IndexedStack(index: _selectedIndex, children: _screens),
+          IndexedStack(
+            index: _selectedIndex,
+            children: [
+              LibraryScreen(onOpenAllSongs: _openAllSongs),
+              SongsScreen(key: _songsKey),
+            ],
+          ),
           if (showMiniPlayer)
             Positioned(
               left: 0,
@@ -200,9 +215,9 @@ class _MainShellState extends State<MainShell> {
             label: 'Library',
           ),
           NavigationDestination(
-            icon: Icon(Icons.search_rounded),
-            selectedIcon: Icon(Icons.manage_search_rounded),
-            label: 'Search',
+            icon: Icon(Icons.queue_music_outlined),
+            selectedIcon: Icon(Icons.queue_music_rounded),
+            label: 'Songs',
           ),
         ],
       ),

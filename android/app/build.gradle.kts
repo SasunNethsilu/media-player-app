@@ -1,11 +1,31 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val releaseSigningProperties = Properties()
+val releaseSigningPropertiesFile = rootProject.file("key.properties")
+if (releaseSigningPropertiesFile.isFile) {
+    FileInputStream(releaseSigningPropertiesFile).use { releaseSigningProperties.load(it) }
+}
+val releaseRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+val signingFields = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+if (releaseRequested && signingFields.any { releaseSigningProperties.getProperty(it).isNullOrBlank() }) {
+    throw GradleException("Release signing requires android/key.properties with storeFile, storePassword, keyAlias, and keyPassword")
+}
+val releaseKeystoreFile = releaseSigningProperties.getProperty("storeFile")?.let { rootProject.file(it) }
+if (releaseRequested && releaseKeystoreFile?.isFile != true) {
+    throw GradleException("Release signing keystore is missing")
+}
+
 android {
-    namespace = "com.example.media_player"
+    namespace = "com.sasunnethsilu.musicplayer"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,8 +35,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.media_player"
+        applicationId = "com.sasunnethsilu.musicplayer"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -29,11 +48,18 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = releaseKeystoreFile
+            storePassword = releaseSigningProperties.getProperty("storePassword")
+            keyAlias = releaseSigningProperties.getProperty("keyAlias")
+            keyPassword = releaseSigningProperties.getProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

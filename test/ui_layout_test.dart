@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_player/main.dart';
 import 'package:media_player/models/song.dart';
+import 'package:media_player/models/library_catalog.dart';
 import 'package:media_player/providers/library_collections.dart';
 import 'package:media_player/providers/player_state.dart';
+import 'package:media_player/providers/app_settings.dart';
 import 'package:media_player/screens/library_screen.dart';
-import 'package:media_player/screens/search_screen.dart';
+import 'package:media_player/screens/library_browse_screen.dart';
+import 'package:media_player/screens/songs_screen.dart';
 import 'package:media_player/screens/playlist_screen.dart';
 import 'package:media_player/screens/now_playing_screen.dart';
 import 'package:media_player/screens/queue_screen.dart';
@@ -30,6 +33,7 @@ class StatusPlayer extends LibraryTestPlayer {
 
 void main() {
   late LibraryCollections collections;
+  late AppSettings settings;
   late LibraryTestPlayer player;
   late String playlistId;
   final songs = List.generate(
@@ -46,6 +50,7 @@ void main() {
 
   setUp(() async {
     collections = LibraryCollections(preferences: MemoryPreferences());
+    settings = AppSettings(preferences: MemoryPreferences());
     playlistId = collections
         .createPlaylist('A long playlist name with plenty of words')
         .id;
@@ -60,6 +65,7 @@ void main() {
   tearDown(() {
     player.dispose();
     collections.dispose();
+    settings.dispose();
   });
 
   Future<void> mount(
@@ -76,6 +82,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<LibraryCollections>.value(value: collections),
+          ChangeNotifierProvider<AppSettings>.value(value: settings),
           ChangeNotifierProvider<PlayerState>.value(value: player),
         ],
         child: Builder(
@@ -106,7 +113,7 @@ void main() {
     for (final page in [
       'library',
       'playlists',
-      'search',
+      'songs',
       'playlist',
       'player',
       'queue',
@@ -116,7 +123,7 @@ void main() {
       ) async {
         final screen = switch (page) {
           'library' || 'playlists' => const LibraryScreen(),
-          'search' => const SearchScreen(),
+          'songs' => const SongsScreen(),
           'playlist' => PlaylistScreen(playlistId: playlistId),
           'player' => const NowPlayingScreen(),
           _ => const QueueScreen(),
@@ -169,15 +176,80 @@ void main() {
     expect(collections.playlistById(playlistId)!.name, 'Renamed');
   });
 
-  testWidgets('search remains scrollable with keyboard and large text', (
+  testWidgets('songs remain scrollable with keyboard and large text', (
     tester,
   ) async {
     await mount(tester, const MainShell(), const Size(320, 640), keyboard: 260);
-    await tester.tap(find.text('Search').last);
+    await tester.tap(find.text('Songs').last);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'long');
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'Library and Playlists pills remain visible while each list scrolls',
+    (tester) async {
+      for (var i = 0; i < 8; i++) {
+        collections.createPlaylist('Another playlist $i');
+      }
+      await mount(tester, const LibraryScreen(), const Size(320, 480));
+
+      final playlistsPill = find.text('Playlists');
+      final pillPosition = tester.getTopLeft(playlistsPill);
+      await tester.drag(
+        find.byKey(const PageStorageKey('library-overview')),
+        const Offset(0, -500),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(playlistsPill), pillPosition);
+
+      await tester.tap(playlistsPill);
+      await tester.pumpAndSettle();
+      final libraryPill = find.text('Library');
+      final libraryPosition = tester.getTopLeft(libraryPill);
+      await tester.drag(
+        find.byKey(const PageStorageKey('local-playlists-grid')),
+        const Offset(0, -500),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(libraryPill), libraryPosition);
+
+      await tester.tap(libraryPill);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const PageStorageKey('library-overview')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('artist album subtitle fits within its horizontal list', (
+    tester,
+  ) async {
+    final artist = groupArtists(songs).single;
+    await mount(
+      tester,
+      ArtistDetailScreen(artist: artist),
+      const Size(390, 844),
+    );
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -380));
+    await tester.pumpAndSettle();
+
+    final albumList = find.byWidgetPredicate(
+      (widget) =>
+          widget is ListView && widget.scrollDirection == Axis.horizontal,
+    );
+    final subtitle = find.descendant(
+      of: albumList,
+      matching: find.text(artist.name),
+    );
+    expect(subtitle, findsOneWidget);
+    expect(
+      tester.getRect(subtitle).bottom,
+      lessThanOrEqualTo(tester.getRect(albumList).bottom),
+    );
   });
   testWidgets('playlist song picker supports a keyboard in landscape', (
     tester,
@@ -228,15 +300,15 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   for (final status in ['empty', 'loading', 'error']) {
-    for (final search in [false, true]) {
+    for (final songsScreen in [false, true]) {
       testWidgets(
-        '${search ? 'Search' : 'Library'} $status state fits landscape',
+        '${songsScreen ? 'Songs' : 'Library'} $status state fits landscape',
         (tester) async {
           player.dispose();
           player = StatusPlayer(collections: collections, status: status);
           await mount(
             tester,
-            search ? const SearchScreen() : const LibraryScreen(),
+            songsScreen ? const SongsScreen() : const LibraryScreen(),
             const Size(800, 360),
             settle: status != 'loading',
           );

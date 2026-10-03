@@ -1,4 +1,4 @@
-package com.example.media_player
+package com.sasunnethsilu.musicplayer
 
 import io.flutter.embedding.android.FlutterActivity
 

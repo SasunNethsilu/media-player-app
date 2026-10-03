@@ -2,6 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class MemoryPreferences implements SharedPreferencesAsync {
   final Map<String, String> values = {};
+  final Map<String, bool> boolValues = {};
   final failures = <String>{};
   final void Function(String key, String value)? onWrite;
 
@@ -9,6 +10,15 @@ class MemoryPreferences implements SharedPreferencesAsync {
 
   @override
   Future<String?> getString(String key) async => values[key];
+
+  @override
+  Future<bool?> getBool(String key) async => boolValues[key];
+
+  @override
+  Future<void> setBool(String key, bool value) async {
+    if (failures.isNotEmpty) throw StateError('Storage unavailable');
+    boolValues[key] = value;
+  }
 
   @override
   Future<void> setString(String key, String value) async {
@@ -21,6 +31,7 @@ class MemoryPreferences implements SharedPreferencesAsync {
   Future<void> remove(String key) async {
     if (failures.isNotEmpty) throw StateError('Storage unavailable');
     values.remove(key);
+    boolValues.remove(key);
   }
 
   @override

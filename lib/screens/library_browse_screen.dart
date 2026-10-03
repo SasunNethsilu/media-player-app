@@ -414,6 +414,36 @@ class _CollectionDetailState extends State<_CollectionDetail> {
         final stackControls =
             MediaQuery.sizeOf(context).width < 360 ||
             MediaQuery.textScalerOf(context).scale(14) > 21;
+        final playButton = FilledButton.icon(
+          onPressed: () {
+            if (showPause) {
+              player.togglePlayPause();
+            } else {
+              _play();
+            }
+          },
+          style: FilledButton.styleFrom(
+            backgroundColor: scheme.primary,
+            foregroundColor: scheme.onPrimary,
+            minimumSize: const Size(0, 52),
+            shape: const StadiumBorder(),
+          ),
+          icon: Icon(
+            showPause ? Icons.pause_rounded : Icons.play_arrow_rounded,
+          ),
+          label: Text(showPause ? 'Pause' : 'Play'),
+        );
+        final shuffleButton = OutlinedButton.icon(
+          onPressed: () => _play(shuffle: true),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.white,
+            minimumSize: const Size(0, 52),
+            side: const BorderSide(color: Colors.white24),
+            shape: const StadiumBorder(),
+          ),
+          icon: const Icon(Icons.shuffle_rounded),
+          label: const Text('Shuffle'),
+        );
 
         return Scaffold(
           extendBody: true,
@@ -508,51 +538,15 @@ class _CollectionDetailState extends State<_CollectionDetail> {
                                 ? CrossAxisAlignment.stretch
                                 : CrossAxisAlignment.center,
                             children: [
-                              Flexible(
-                                fit: stackControls
-                                    ? FlexFit.loose
-                                    : FlexFit.tight,
-                                child: FilledButton.icon(
-                                  onPressed: () {
-                                    if (showPause) {
-                                      player.togglePlayPause();
-                                    } else {
-                                      _play();
-                                    }
-                                  },
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: scheme.primary,
-                                    foregroundColor: scheme.onPrimary,
-                                    minimumSize: const Size(0, 52),
-                                    shape: const StadiumBorder(),
-                                  ),
-                                  icon: Icon(
-                                    showPause
-                                        ? Icons.pause_rounded
-                                        : Icons.play_arrow_rounded,
-                                  ),
-                                  label: Text(showPause ? 'Pause' : 'Play'),
-                                ),
-                              ),
+                              if (stackControls)
+                                playButton
+                              else
+                                Flexible(child: playButton),
                               const SizedBox(width: 12, height: 12),
-                              Flexible(
-                                fit: stackControls
-                                    ? FlexFit.loose
-                                    : FlexFit.tight,
-                                child: OutlinedButton.icon(
-                                  onPressed: () => _play(shuffle: true),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    minimumSize: const Size(0, 52),
-                                    side: const BorderSide(
-                                      color: Colors.white24,
-                                    ),
-                                    shape: const StadiumBorder(),
-                                  ),
-                                  icon: const Icon(Icons.shuffle_rounded),
-                                  label: const Text('Shuffle'),
-                                ),
-                              ),
+                              if (stackControls)
+                                shuffleButton
+                              else
+                                Flexible(child: shuffleButton),
                             ],
                           ),
                         ],
@@ -575,9 +569,9 @@ class _CollectionDetailState extends State<_CollectionDetail> {
                     SliverToBoxAdapter(
                       child: SizedBox(
                         height:
-                            150 +
-                            MediaQuery.textScalerOf(context).scale(15) * 1.35 +
-                            MediaQuery.textScalerOf(context).scale(12) * 1.35,
+                            157 +
+                            MediaQuery.textScalerOf(context).scale(15) * 1.6 +
+                            MediaQuery.textScalerOf(context).scale(12) * 1.6,
                         child: ListView.separated(
                           padding: const EdgeInsets.symmetric(horizontal: 24),
                           scrollDirection: Axis.horizontal,

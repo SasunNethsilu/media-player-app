@@ -6,6 +6,7 @@ import 'package:media_player/main.dart';
 import 'package:media_player/models/song.dart';
 import 'package:media_player/providers/library_collections.dart';
 import 'package:media_player/providers/player_state.dart';
+import 'package:media_player/providers/app_settings.dart';
 import 'package:media_player/screens/now_playing_screen.dart';
 import 'package:media_player/screens/playlist_screen.dart';
 import 'package:media_player/screens/queue_screen.dart';
@@ -33,6 +34,7 @@ class LibraryTestPlayer extends PlayerState {
 
 void main() {
   late LibraryCollections collections;
+  late AppSettings settings;
   late LibraryTestPlayer state;
   late FakeAudioPlayer audio;
   late String playlistId;
@@ -50,6 +52,7 @@ void main() {
 
   Future<void> initialize() async {
     collections = LibraryCollections(preferences: MemoryPreferences());
+    settings = AppSettings(preferences: MemoryPreferences());
     playlistId = collections.createPlaylist('Mix').id;
     collections.setPlaylistSongs(playlistId, [1, 2, 3, 4]);
     audio = FakeAudioPlayer();
@@ -64,6 +67,7 @@ void main() {
   tearDown(() {
     state.dispose();
     collections.dispose();
+    settings.dispose();
   });
 
   Future<void> pump(
@@ -78,6 +82,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<LibraryCollections>.value(value: collections),
+          ChangeNotifierProvider<AppSettings>.value(value: settings),
           ChangeNotifierProvider<PlayerState>.value(value: state),
         ],
         child: app,

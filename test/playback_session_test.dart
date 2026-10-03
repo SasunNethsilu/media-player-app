@@ -6,6 +6,7 @@ import 'package:media_player/models/playback_sequence.dart';
 import 'package:media_player/models/song.dart';
 import 'package:media_player/providers/library_collections.dart';
 import 'package:media_player/providers/player_state.dart';
+import 'package:media_player/providers/app_settings.dart';
 import 'package:media_player/services/playback_session_store.dart';
 
 import 'support/fake_audio_player.dart';
@@ -23,6 +24,43 @@ void main() {
         durationMs: 180000,
       ),
   ];
+
+  test(
+    'disabled restoration leaves the saved session intact and launches empty',
+    () async {
+      final preferences = MemoryPreferences();
+      final store = PlaybackSessionStore(preferences: preferences);
+      final collections = LibraryCollections(preferences: preferences);
+      addTearDown(collections.dispose);
+      final original = PlayerState(
+        collections: collections,
+        audioPlayer: FakeAudioPlayer(),
+        sessionStore: store,
+        scanSongs: () async => songs,
+      );
+      addTearDown(original.dispose);
+      await original.loadLibrary();
+      await original.playFromLibrary(songs.first, songs);
+      await store.flush();
+
+      final settings = AppSettings(preferences: preferences);
+      addTearDown(settings.dispose);
+      await settings.setRestorePlaybackSession(false);
+      final reopened = PlayerState(
+        collections: collections,
+        appSettings: settings,
+        audioPlayer: FakeAudioPlayer(),
+        sessionStore: PlaybackSessionStore(preferences: preferences),
+        scanSongs: () async => songs,
+      );
+      addTearDown(reopened.dispose);
+      await reopened.loadLibrary();
+
+      expect(reopened.currentSong, isNull);
+      expect(reopened.queue, isEmpty);
+      expect((await store.load())?.entries, hasLength(songs.length));
+    },
+  );
 
   test('session state and throttled position updates are persisted', () async {
     final writtenKeys = <String>[];

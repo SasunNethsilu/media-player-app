@@ -11,6 +11,7 @@ import '../services/library_scanner.dart';
 import '../services/playback_session_store.dart';
 import '../services/system_media_handler.dart';
 import 'library_collections.dart';
+import 'app_settings.dart';
 
 export '../models/playback_sequence.dart' show PlaybackRepeatMode;
 
@@ -28,6 +29,7 @@ class PlayerState extends ChangeNotifier {
   String? _libraryError;
   bool _isDisposed = false;
   final LibraryCollections collections;
+  final AppSettings? appSettings;
   String? _activePlaylistId;
   Future<void> _pendingPlayback = Future<void>.value();
   int _pendingTransports = 0;
@@ -49,6 +51,7 @@ class PlayerState extends ChangeNotifier {
 
   PlayerState({
     required this.collections,
+    this.appSettings,
     AudioPlayer? audioPlayer,
     Random? random,
     this.sessionStore,
@@ -357,6 +360,10 @@ class PlayerState extends ChangeNotifier {
   Future<void> _restoreSessionAfterLibrary() async {
     if (_sessionRestoreAttempted || _isDisposed) return;
     _sessionRestoreAttempted = true;
+    if (appSettings?.restorePlaybackSession == false) {
+      _sessionReady = true;
+      return;
+    }
     final store = sessionStore ??= PlaybackSessionStore();
     final saved = await store.load();
     if (_isDisposed) return;

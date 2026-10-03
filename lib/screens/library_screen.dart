@@ -5,17 +5,17 @@ import '../models/song.dart';
 import '../models/library_catalog.dart';
 import '../providers/library_collections.dart';
 import '../providers/player_state.dart';
+import '../providers/app_settings.dart';
 import '../services/artwork_palette_service.dart';
-import '../services/song_filter.dart';
 import '../widgets/song_artwork.dart';
-import '../widgets/song_tile.dart';
 import 'playlist_screen.dart';
 import 'library_browse_screen.dart';
-
-enum _SongListAction { sortTitle, sortArtist, toggleShortAudio }
+import 'settings_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({super.key});
+  final VoidCallback? onOpenAllSongs;
+
+  const LibraryScreen({super.key, this.onOpenAllSongs});
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -23,8 +23,6 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen> {
   int _section = 0;
-  SortOption _sortOption = SortOption.title;
-  bool _hideShortAudio = false;
 
   int? _paletteSongId;
   Future<SongVisuals>? _paletteFuture;
@@ -54,8 +52,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void _openBrowse(LibraryBrowseType type) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            LibraryBrowseScreen(type: type, hideShortAudio: _hideShortAudio),
+        builder: (_) => LibraryBrowseScreen(
+          type: type,
+          hideShortAudio: context.read<AppSettings>().hideShortAudio,
+        ),
       ),
     );
   }
@@ -357,6 +357,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     LibraryCollections collections,
     ColorScheme scheme,
   ) {
+    final settings = context.watch<AppSettings>();
     if (player.isLoadingLibrary) {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
@@ -377,14 +378,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
       );
     }
 
-    final visibleSongs = applyShortAudioFilter(
-      player.songs,
-      enabled: _hideShortAudio,
-    );
-    final songs = filterAndSortSongs(visibleSongs, '', _sortOption);
     final recent = collections.recentSongs(player.songs);
-    final albumCount = groupAlbums(visibleSongs).length;
-    final artistCount = groupArtists(visibleSongs).length;
+    final browseSongs = applyShortAudioFilter(
+      player.songs,
+      enabled: settings.hideShortAudio,
+    );
+    final albumCount = groupAlbums(browseSongs).length;
+    final artistCount = groupArtists(browseSongs).length;
     final textScaler = MediaQuery.of(context).textScaler;
 
     return RefreshIndicator(
@@ -441,19 +441,57 @@ class _LibraryScreenState extends State<LibraryScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
-              child: const Text(
-                'Browse',
-                style: TextStyle(
-                  fontSize: 21,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.4,
-                ),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Browse',
+                      style: TextStyle(
+                        fontSize: 21,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.4,
+                      ),
+                    ),
+                  ),
+                  PopupMenuButton<bool>(
+                    tooltip: 'Filter albums and artists',
+                    icon: Icon(
+                      settings.hideShortAudio
+                          ? Icons.filter_alt_rounded
+                          : Icons.filter_alt_outlined,
+                      color: settings.hideShortAudio
+                          ? scheme.primary
+                          : Colors.white60,
+                    ),
+                    onSelected: (_) async {
+                      try {
+                        await settings.setHideShortAudio(
+                          !settings.hideShortAudio,
+                        );
+                      } catch (_) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Could not save this setting.'),
+                          ),
+                        );
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      CheckedPopupMenuItem(
+                        value: true,
+                        checked: settings.hideShortAudio,
+                        child: const Text('Hide tracks under 30 seconds'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final stack =
@@ -495,130 +533,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        const Flexible(
-                          child: Text(
-                            'All Songs',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 21,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.4,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          '${songs.length}',
-                          style: const TextStyle(
-                            color: Colors.white38,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  PopupMenuButton<_SongListAction>(
-                    tooltip: 'Sort and filter songs',
-                    icon: const Icon(Icons.sort_rounded, color: Colors.white60),
-                    onSelected: (action) {
-                      setState(() {
-                        switch (action) {
-                          case _SongListAction.sortTitle:
-                            _sortOption = SortOption.title;
-                          case _SongListAction.sortArtist:
-                            _sortOption = SortOption.artist;
-                          case _SongListAction.toggleShortAudio:
-                            _hideShortAudio = !_hideShortAudio;
-                        }
-                      });
-                    },
-                    itemBuilder: (_) => [
-                      PopupMenuItem(
-                        value: _SongListAction.sortTitle,
-                        child: Row(
-                          children: [
-                            Icon(
-                              _sortOption == SortOption.title
-                                  ? Icons.check_rounded
-                                  : Icons.sort_by_alpha_rounded,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            const Text('Song title'),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: _SongListAction.sortArtist,
-                        child: Row(
-                          children: [
-                            Icon(
-                              _sortOption == SortOption.artist
-                                  ? Icons.check_rounded
-                                  : Icons.person_outline_rounded,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            const Text('Artist name'),
-                          ],
-                        ),
-                      ),
-                      const PopupMenuDivider(),
-                      CheckedPopupMenuItem(
-                        value: _SongListAction.toggleShortAudio,
-                        checked: _hideShortAudio,
-                        child: const Text('Hide tracks under 30 seconds'),
-                      ),
-                    ],
-                  ),
-                ],
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
+              child: _browseCard(
+                title: 'All Songs',
+                detail:
+                    '${player.songs.length} ${player.songs.length == 1 ? 'song' : 'songs'}',
+                icon: Icons.queue_music_rounded,
+                onTap: widget.onOpenAllSongs ?? () {},
+                scheme: scheme,
               ),
-            ),
-          ),
-          if (_hideShortAudio)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: InputChip(
-                    label: const Text('Tracks under 30 seconds hidden'),
-                    avatar: const Icon(Icons.filter_alt_rounded, size: 18),
-                    onDeleted: () => setState(() => _hideShortAudio = false),
-                  ),
-                ),
-              ),
-            ),
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(
-              8,
-              0,
-              8,
-              player.currentSong == null ? 24 : 120,
-            ),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate((context, index) {
-                final song = songs[index];
-
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 3),
-                  child: SongTile(
-                    key: ValueKey(song.id),
-                    song: song,
-                    accentColor: scheme.primary,
-                    isCurrent: player.currentSong?.id == song.id,
-                    isPlaying: player.playPauseShowsPause,
-                    onTap: () => player.playFromLibrary(song, songs),
-                  ),
-                );
-              }, childCount: songs.length),
             ),
           ),
         ],
@@ -1035,53 +958,61 @@ class _LibraryScreenState extends State<LibraryScreen> {
               toolbarHeight: 64,
               backgroundColor: Colors.transparent,
               title: const Text('Your Library'),
+              actions: [
+                IconButton(
+                  tooltip: 'Settings',
+                  icon: const Icon(Icons.settings_outlined),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const SettingsScreen(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
             ),
             body: SafeArea(
               top: false,
-              child: NestedScrollView(
-                headerSliverBuilder: (context, innerBoxIsScrolled) => [
-                  SliverToBoxAdapter(
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Wrap(
-                              spacing: 10,
-                              runSpacing: 10,
-                              children: [
-                                _pill(
-                                  label: 'Library',
-                                  icon: Icons.graphic_eq_rounded,
-                                  index: 0,
-                                  scheme: scheme,
-                                ),
-                                _pill(
-                                  label: 'Playlists',
-                                  icon: Icons.queue_music_rounded,
-                                  index: 1,
-                                  scheme: scheme,
-                                ),
-                              ],
-                            ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          _pill(
+                            label: 'Library',
+                            icon: Icons.graphic_eq_rounded,
+                            index: 0,
+                            scheme: scheme,
                           ),
-                        ),
-                        if (collections.error != null)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-                            child: Text(
-                              collections.error!,
-                              style: TextStyle(color: scheme.error),
-                            ),
+                          _pill(
+                            label: 'Playlists',
+                            icon: Icons.queue_music_rounded,
+                            index: 1,
+                            scheme: scheme,
                           ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
+                  if (collections.error != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                      child: Text(
+                        collections.error!,
+                        style: TextStyle(color: scheme.error),
+                      ),
+                    ),
+                  Expanded(
+                    child: _section == 0
+                        ? _library(player, collections, scheme)
+                        : _playlists(player, collections, scheme),
+                  ),
                 ],
-                body: _section == 0
-                    ? _library(player, collections, scheme)
-                    : _playlists(player, collections, scheme),
               ),
             ),
           ),
