@@ -6,6 +6,14 @@
 
 A local music player for Android, built with Flutter. It plays audio already stored on your device, with an artwork-led interface and no accounts or streaming.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/library.jpeg" alt="Library screen" width="220">
+  <img src="docs/screenshots/now-playing.jpeg" alt="Now Playing screen" width="220">
+  <img src="docs/screenshots/songs.jpeg" alt="Songs screen" width="220">
+</p>
+
 ## Install
 
 Music Player requires **Android 7.0 (API 24) or newer**. When a release is available, download the signed APK from [GitHub Releases](https://github.com/SasunNethsilu/music-player-app/releases), install it, and grant access to audio files when prompted. Songs found on your device will appear in the library.
